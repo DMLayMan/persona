@@ -11,6 +11,8 @@
   "pending_sending": "送信中：{answer}",
   "pending_offline": "接続後に送信：{answer}",
   "hand_back": "コンピューターに任せる",
+  "blocked_attach": "ライブ接続すると、ここで回答できます。コンピューターで回答することもできます。",
+  "blocked_computer": "このセッションはここでは回答できません。コンピューターで回答してください。",
   "question": "質問",
   "tool_loop_kicker": "ツール呼び出しのループの可能性",
   "previous_question": "前の質問",

@@ -11,6 +11,8 @@
   "pending_sending": "正在发送：{answer}",
   "pending_offline": "连上后发送：{answer}",
   "hand_back": "交给电脑处理",
+  "blocked_attach": "实时接入后就能在这里作答，也可以到电脑上处理。",
+  "blocked_computer": "这个会话不允许在这里作答，请到电脑上处理。",
   "question": "提问",
   "tool_loop_kicker": "可能陷入工具调用循环",
   "previous_question": "上一题",

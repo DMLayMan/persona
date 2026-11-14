@@ -15,7 +15,8 @@ import { backgroundPanelOf, hasBackgroundWork, isWorkflowsCommand, latestWorkflo
 import { machineWithHub } from "../../lib/mesh";
 import { useLayout } from "../../lib/layout";
 import { hasModes, isMuted, toggleMute } from "../../lib/session-actions";
-import { attachLive, flipPin } from "../../lib/agent-actions";
+import { flipPin } from "../../lib/agent-actions";
+import { attachLive } from "../../lib/attach-live";
 import { isPinned } from "../../lib/pins";
 import { acknowledgeLaunch } from "../../lib/new-agent";
 import { useRuntimeSession } from "../../lib/runtime-session";

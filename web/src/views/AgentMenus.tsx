@@ -1,6 +1,7 @@
 // The Agents list's menus (iOS AgentRowMenu / SpaceMenuItems): a row's ⋯ or right click, a space's ⋯ on its header,
 // and the confirmation of "Mark all as seen". What they do is in lib/agent-actions.ts.
-import { attachLive, flipMute, flipPin, handToPersona } from "../lib/agent-actions";
+import { flipMute, flipPin, handToPersona } from "../lib/agent-actions";
+import { attachLive } from "../lib/attach-live";
 import { errorText } from "../lib/api";
 import { resumeCommand, sessionCanRename, sessionDeletable, sessionMenuActions } from "../lib/format";
 import { appArchiveDeps, archiveAgent, archiveOffers, deleteInsteadOfArchive } from "../lib/agent-archives";
