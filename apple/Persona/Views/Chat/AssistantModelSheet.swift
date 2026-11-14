@@ -51,10 +51,42 @@ nonisolated enum AssistantModelChoice {
     }
 
     /// The model id ticked for `launcher` in the sheet: nil when the setup runs on another launcher, "" on its Default
-    /// row, else the picked model's id.
-    static func selectedModel(_ e: Effective, launcher: String) -> String? {
+    /// row, else the picked model's id. A hub-resolved model also ticks its alias row.
+    static func selectedModel(_ e: Effective, launcher: String, list: LauncherModels? = nil) -> String? {
         guard e.launcher == launcher else { return nil }
-        return e.model?.emptyAsNil ?? ""
+        let model = e.model?.emptyAsNil
+        guard let model else { return "" }
+        if let row = list?.models.first(where: { $0.id == model || $0.resolved == model }) {
+            return row.isDefault ? "" : row.id
+        }
+        return model
+    }
+
+    /// An existing Claude/Codex conversation keeps its engine, matching the hub and web. Unknown runtimes stay
+    /// selectable because refusing them would be a guess; the hub remains authoritative.
+    static func isOtherEngine(sessionAgent: String?, launcherAgent: String?) -> Bool {
+        guard let session = engine(sessionAgent), let launcher = engine(launcherAgent) else { return false }
+        return session != launcher
+    }
+
+    /// A locked launcher keeps only its default entry, as on the web. Its lock explains why concrete model IDs are absent;
+    /// choosing no model remains valid and the hub accepts it.
+    static func visibleModels(_ list: LauncherModels?) -> [AgentModel] {
+        (list?.models ?? []).filter { list?.locked == nil || $0.isDefault }
+    }
+
+    /// The configured-model row for a launcher with no readable catalog or no models of its own.
+    static func configuredFallback(_ launcher: Launcher, models: [AgentModel], locked: String?) -> String? {
+        guard models.isEmpty, locked == nil else { return nil }
+        return launcher.model?.emptyAsNil
+    }
+
+    private static func engine(_ raw: String?) -> String? {
+        switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "" {
+        case "", "claude", "claude-code", "claudecode": "claude"
+        case "codex", "codex-cli": "codex"
+        default: nil
+        }
     }
 
     /// The pick a row keeps: nil for the setup already in force (the hub would store a no-op). A Default row sends no
@@ -85,13 +117,13 @@ private extension String {
 final class AssistantModelPanelModel {
     struct Deps {
         var launchers: (_ machine: MachineRef, _ refresh: Bool) async throws -> APIClient.LaunchersResponse
-        var models: (_ machine: MachineRef, _ launcher: String) async throws -> LauncherModels
+        var models: (_ machine: MachineRef, _ launcher: String, _ refresh: Bool) async throws -> LauncherModels
         var keep: (_ key: SessionKey, _ pick: ModelPick) async -> Bool
         var drop: (_ key: SessionKey) async -> Bool
         static var live: Deps {
             Deps(
                 launchers: { try await AppModel.shared.assistantLaunchers($0, refresh: $1) },
-                models: { try await AppModel.shared.api($0.group)?.launcherModels(machine: $0.id, launcher: $1)
+                models: { try await AppModel.shared.api($0.group)?.launcherModels(machine: $0.id, launcher: $1, refresh: $2)
                     ?? LauncherModels(agent: "", models: [], locked: nil, machine: nil) },
                 keep: { await AppModel.shared.keepConversationModel($0, pick: $1) },
                 drop: { await AppModel.shared.dropConversationModel($0) })
@@ -137,18 +169,26 @@ final class AssistantModelPanelModel {
             return
         }
         for launcher in response?.launchers ?? [] {
-            await readList(launcher.name)
+            await readList(launcher, refresh: refresh)
         }
     }
 
-    private func readList(_ name: String, refresh: Bool = false) async {
+    private func readList(_ launcher: Launcher, refresh: Bool = false) async {
+        let name = launcher.name
         do {
-            let answer = try await deps.models(machine, name)
+            let answer = try await deps.models(machine, name, refresh)
             lists[name] = answer
             listErrors[name] = nil
         } catch {
-            if let e = error as? APIError, e.status == 404 { return } // older hub/node: no list, the launcher row stands alone
+            if let e = error as? APIError, e.status == 404 {
+                // Older hub/node: no catalog, but the launcher's configured model is still a concrete choice.
+                lists[name] = LauncherModels(agent: launcher.runtimeAgent ?? "claude",
+                                             models: [], locked: nil, machine: nil)
+                listErrors[name] = nil
+                return
+            }
             guard !error.isCancellation else { return }
+            lists[name] = nil
             listErrors[name] = error.shown
         }
     }
@@ -256,39 +296,62 @@ struct AssistantModelSheet: View {
 
     @ViewBuilder
     private func section(_ launcher: Launcher) -> some View {
-        let selected = AssistantModelChoice.selectedModel(effective, launcher: launcher.name)
+        let list = panel.list(launcher.name)
+        let selected = AssistantModelChoice.selectedModel(effective, launcher: launcher.name, list: list)
+        let otherEngine = effective.launcher != launcher.name && AssistantModelChoice.isOtherEngine(
+            sessionAgent: session?.agent, launcherAgent: launcher.runtimeAgent)
+        let locked = list?.locked
+        let models = AssistantModelChoice.visibleModels(list)
+        let configured = AssistantModelChoice.configuredFallback(launcher, models: models, locked: locked)
         Section {
-            if selected != nil {
-                row(launcher: launcher.name, modelID: "", title: String(localized: "Default [Prompt Composer 844b8c]"),
-                    detail: launcher.model, ticked: selected == "", locked: panel.list(launcher.name)?.locked)
-            }
-            if let locked = panel.list(launcher.name)?.locked {
-                Label(locked, systemImage: Theme.Icon.locked)
+            if otherEngine {
+                let to = launcher.runtimeAgent?.lowercased() == "codex" ? "Codex" : "Claude Code"
+                Label(String(localized: "Switching from \(session?.agentLabel ?? "Claude Code") to \(to) needs a new conversation"),
+                      systemImage: Theme.Icon.locked)
                     .font(Theme.Font.secondary).foregroundStyle(.secondary)
-                    .accessibilityIdentifier("assistantModel.locked.\(launcher.name)")
-            } else if let list = panel.list(launcher.name) {
-                ForEach(list.models) { m in
-                    row(launcher: launcher.name, modelID: m.id, title: m.displayName, detail: m.detail,
-                        ticked: selected == m.id, locked: nil, custom: m.custom)
-                }
-                if list.takesTypedModel, model.keepsConversationModelPick(panel.key.group) {
-                    Button { typingFor = launcher.name } label: {
-                        Label(String(localized: "Other Model…"), systemImage: Theme.Icon.keyboard).lineLimit(1)
-                    }
-                    .accessibilityIdentifier("assistantModel.other.\(launcher.name)")
-                }
-            } else if panel.error(launcher.name) != nil {
-                Button { Task { await panel.load(refresh: true) } } label: {
-                    Label(String(localized: "Retry"), systemImage: Theme.Icon.error).lineLimit(1)
-                }
+                    .accessibilityIdentifier("assistantModel.otherEngine.\(launcher.name)")
             } else {
-                HStack(spacing: Theme.Space.s) {
-                    ProgressView().controlSize(.small)
-                    Text(String(localized: "Reading models…")).font(Theme.Font.secondary).foregroundStyle(.secondary)
+                // A real Default row comes from the catalog. Add one only when the current setup has no such row.
+                if selected != nil, configured == nil, !models.contains(where: { $0.isDefault }) {
+                    row(launcher: launcher.name, modelID: "", title: String(localized: "Default [Prompt Composer 844b8c]"),
+                        detail: launcher.model, ticked: selected == "", locked: nil)
+                }
+                if let locked {
+                    Label(locked, systemImage: Theme.Icon.locked)
+                        .font(Theme.Font.secondary).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("assistantModel.locked.\(launcher.name)")
+                }
+                if let list {
+                    if let configured {
+                        // No catalog (a direct API or an older node): its configured model is still a concrete choice.
+                        row(launcher: launcher.name, modelID: configured, title: SessionModes.modelName(configured),
+                            detail: nil, ticked: selected == configured, locked: nil)
+                    } else {
+                        ForEach(models) { m in
+                            row(launcher: launcher.name, modelID: m.isDefault ? "" : m.id,
+                                title: m.displayName, detail: m.detail,
+                                ticked: selected == (m.isDefault ? "" : m.id), locked: nil, custom: m.custom)
+                        }
+                    }
+                    if list.takesTypedModel, model.offersTypedModels(panel.key.group) {
+                        Button { typingFor = launcher.name } label: {
+                            Label(String(localized: "Other Model…"), systemImage: Theme.Icon.keyboard).lineLimit(1)
+                        }
+                        .accessibilityIdentifier("assistantModel.other.\(launcher.name)")
+                    }
+                } else if panel.error(launcher.name) != nil {
+                    Button { Task { await panel.load(refresh: true) } } label: {
+                        Label(String(localized: "Retry"), systemImage: Theme.Icon.error).lineLimit(1)
+                    }
+                } else {
+                    HStack(spacing: Theme.Space.s) {
+                        ProgressView().controlSize(.small)
+                        Text(String(localized: "Reading models…")).font(Theme.Font.secondary).foregroundStyle(.secondary)
+                    }
                 }
             }
         } header: {
-            Text(launcher.name)
+            Text(launcher.displayName?.emptyAsNil ?? launcher.name)
         }
     }
 

@@ -371,6 +371,8 @@ final class AppModel {
     /// The main chat's own picker (`?purpose=assistant`, #5033): its eligible launchers, the effective Main chat
     /// default, and what can't run there with why. Separate from `launcherCache`, which serves the agent.new purpose.
     @ObservationIgnored private(set) var assistantLauncherCache: [MachineRef: APIClient.LaunchersResponse] = [:]
+    /// Observed because the cache above is intentionally not observed: a fresh answer must redraw the composer's title.
+    private(set) var assistantLauncherRevision = 0
 
     /// The hub-level group's client: for pages about the hub (Persona, Inbox, its settings). A session's, a machine's
     /// or an interaction's requests go to its own group (`api(_:)`). The assistant's routes go to the manager the Persona
@@ -1173,8 +1175,7 @@ final class AppModel {
 
     /// The main conversation (the Persona tab's long-running one), when the hub has one.
     var assistantMain: SessionKey? {
-        guard let st = assistantConfig, let id = st.main, !id.isEmpty else { return nil }
-        return SessionKey(group: hub?.group ?? "", machineID: st.machineID, sessionID: id)
+        assistantConfig?.mainKey(group: hub?.group ?? "")
     }
 
     /// Shows a Persona conversation from another page (Scheduled Tasks' Run Now / its own conversation): the Persona tab or the
@@ -3198,7 +3199,6 @@ final class AppModel {
 
     /// After a change in Settings › Model: the pickers read the machines' lists again, and the list of launchers reloads.
     func launchersChanged() {
-        launchersRevision += 1
         launcherDefaultsChanged()
     }
 
@@ -3208,6 +3208,9 @@ final class AppModel {
         launcherCache = [:]
         launcherDefaults = [:]
         assistantLauncherCache = [:]
+        // Model Settings changes are launcher changes too: wake the open main-chat composer to re-read the default.
+        launchersRevision += 1
+        assistantLauncherRevision += 1
     }
 
     /// The list a start picks from (New Agent, Run Agent Here): always read again, and the cache with it. Each launcher's
@@ -3233,6 +3236,7 @@ final class AppModel {
         guard let api = api(machine.group) else { return APIClient.LaunchersResponse(launchers: [], default: nil, unavailable: nil) }
         let r = try await api.launcherList(machine: machine.id, purpose: "assistant")
         assistantLauncherCache[machine] = r
+        assistantLauncherRevision += 1
         return r
     }
 
@@ -3280,6 +3284,11 @@ final class AppModel {
     /// keeps nothing and the app leaves the model row read-only.
     func keepsConversationModelPick(_ group: String) -> Bool {
         features(group).contains("assistant_model_pick")
+    }
+
+    /// Whether this hub remembers typed model IDs (`typed_models`), independently of conversation picks.
+    func offersTypedModels(_ group: String) -> Bool {
+        features(group).contains(ModelID.feature)
     }
 
     /// The main chat picker data already read for `machine` (nil: nothing cached yet; `assistantLaunchers(_:)` reads it).

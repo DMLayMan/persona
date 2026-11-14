@@ -146108,6 +146108,29 @@
       },
       "extractionState" : "manual"
     },
+    "Switching from %@ to %@ needs a new conversation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switching from %@ to %@ needs a new conversation"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ から %2$@ への切り替えには新しい会話が必要です"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 %1$@ 换到 %2$@ 需要新开对话"
+          }
+        }
+      },
+      "extractionState" : "manual"
+    },
     "Switching questions…" : {
       "localizations" : {
         "en" : {

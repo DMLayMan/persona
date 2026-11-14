@@ -48,6 +48,15 @@ struct AssistantModelChoiceTests {
         #expect(!e.picked)
     }
 
+    @Test func aDefaultModelWinsEvenWhenTheRunningProcessUsesAnotherLauncher() {
+        let r = response(default: def(launcher: "team-api", model: "claude-sonnet-5-5"))
+        let e = AssistantModelChoice.effective(launcher: "claude", model: "claude-haiku-5-5", effort: nil,
+                                               pick: nil, response: r)
+        #expect(e.launcher == "team-api")
+        #expect(e.model == "claude-sonnet-5-5")
+        #expect(e.source == .defaultValue)
+    }
+
     /// A default that names only a launcher runs that launcher's own default model: the running process's model belongs
     /// to its own launcher (the web's `assistantSetup`). A default that names a model runs it, as above.
     @Test func theRunningModelIsIgnoredWhenTheDefaultNamesAnotherLauncher() {
@@ -103,6 +112,49 @@ struct AssistantModelChoiceTests {
         #expect(pick?.launcher == "team-api")
     }
 
+    @Test func resolvedModelsTickTheirAliasAndDefaultRows() {
+        let aliases = LauncherModels(agent: "claude", models: [
+            AgentModel(id: "opus", name: "Opus", resolved: "claude-opus-5-5"),
+            AgentModel(id: "haiku", name: "Haiku", resolved: "claude-haiku-5-5")
+        ], locked: nil, machine: nil)
+        let e = AssistantModelChoice.Effective(launcher: "claude", model: "claude-opus-5-5", effort: nil, source: .pick)
+        #expect(AssistantModelChoice.selectedModel(e, launcher: "claude", list: aliases) == "opus")
+
+        let withDefault = LauncherModels(agent: "claude", models: [
+            AgentModel(id: "default", name: "Default", resolved: "claude-opus-5-5", isDefault: true),
+            AgentModel(id: "opus", name: "Opus", resolved: "claude-opus-5-5")
+        ], locked: nil, machine: nil)
+        #expect(AssistantModelChoice.selectedModel(e, launcher: "claude", list: withDefault) == "")
+    }
+
+    @Test func lockedLaunchersKeepOnlyTheirSelectableDefault() {
+        let list = LauncherModels(agent: "claude", models: [
+            AgentModel(id: "default", name: "Default", isDefault: true),
+            AgentModel(id: "opus", name: "Opus")
+        ], locked: "The launcher fixes its model", machine: nil)
+        #expect(AssistantModelChoice.visibleModels(list).map(\.id) == ["default"])
+        #expect(AssistantModelChoice.visibleModels(nil).isEmpty)
+        var unlocked = list
+        unlocked.locked = nil
+        #expect(AssistantModelChoice.visibleModels(unlocked).count == 2)
+    }
+
+    @Test func anEmptyCatalogFallsBackToTheConfiguredModelOnlyWhenUnlocked() {
+        let launcher = Launcher(name: "team-api", model: "claude-sonnet-5-5")
+        #expect(AssistantModelChoice.configuredFallback(launcher, models: [], locked: nil) == "claude-sonnet-5-5")
+        #expect(AssistantModelChoice.configuredFallback(launcher, models: [], locked: "locked") == nil)
+        let models = [AgentModel(id: "opus", name: "Opus")]
+        #expect(AssistantModelChoice.configuredFallback(launcher, models: models, locked: nil) == nil)
+    }
+
+    @Test func onlyKnownDifferentConversationEnginesAreRefused() {
+        #expect(AssistantModelChoice.isOtherEngine(sessionAgent: "claude", launcherAgent: "codex"))
+        #expect(AssistantModelChoice.isOtherEngine(sessionAgent: "codex-cli", launcherAgent: "claude-code"))
+        #expect(!AssistantModelChoice.isOtherEngine(sessionAgent: "claude", launcherAgent: "claudecode"))
+        #expect(!AssistantModelChoice.isOtherEngine(sessionAgent: "dsh", launcherAgent: "codex"))
+        #expect(!AssistantModelChoice.isOtherEngine(sessionAgent: "claude", launcherAgent: "dsh"))
+    }
+
     // MARK: Display name
 
     @Test func displayNameUsesTheModelThenTheLaunchersOwnModelThenTheLauncher() {
@@ -126,6 +178,18 @@ struct AssistantModelChoiceTests {
         #expect(s.modelPick == ModelPick(launcher: "team-api", model: "claude-sonnet-5-5", effort: "low"))
     }
 
+    @Test func aMalformedModelPickDoesNotDropTheSession() throws {
+        for pick in [#"{"launcher":123}"#, #"\"odd\""#] {
+            let json = """
+            {"machine_id":"box","session_id":"s1","title":"Main","cwd":"/tmp","status":"offline",
+             "assistant":true,"model_pick":\(pick)}
+            """.data(using: .utf8)!
+            let s = try JSON.decoder.decode(Session.self, from: json)
+            #expect(s.sessionID == "s1")
+            #expect(s.modelPick == nil)
+        }
+    }
+
     @Test func launchersResponseDecodesDefaultAndUnavailable() throws {
         let json = """
         {"launchers":[{"name":"claude","model":"opus"}],
@@ -139,6 +203,38 @@ struct AssistantModelChoiceTests {
         #expect(r.unavailable?.first?.name == "far-gw")
         #expect(r.unavailable?.first?.reason == "out of scope")
         #expect(r.unavailable?.first?.displayName == "Far gateway")
+    }
+
+    @Test func launcherDecodesFriendlyNameAndRuntimeKind() throws {
+        let json = """
+        {"name":"team-api","display_name":"Team API","model":"claude-sonnet-5-5","agent_type":"claude"}
+        """.data(using: .utf8)!
+        let launcher = try JSON.decoder.decode(Launcher.self, from: json)
+        #expect(launcher.displayName == "Team API")
+        #expect(launcher.agentType == "claude")
+        #expect(launcher.runtimeAgent == "claude")
+
+        let fallback = try JSON.decoder.decode(Launcher.self, from: Data(#"{"name":"cx","agent_type":"","agent":"codex"}"#.utf8))
+        #expect(fallback.runtimeAgent == "codex")
+    }
+
+    @Test func assistantStateUsesTheConfirmedMainMachine() throws {
+        let old = try JSON.decoder.decode(APIClient.AssistantState.self, from: Data("""
+        {"machine_id":"default","launcher":"claude","cwd":"/home","main":"main-session","conversations":[]}
+        """.utf8))
+        #expect(old.mainKey() == SessionKey(machineID: "default", sessionID: "main-session"))
+
+        let routed = try JSON.decoder.decode(APIClient.AssistantState.self, from: Data("""
+        {"machine_id":"default","main_machine_id":"route-box","launcher":"claude","cwd":"/home",
+         "main":"main-session","conversations":[]}
+        """.utf8))
+        #expect(routed.mainKey() == SessionKey(machineID: "route-box", sessionID: "main-session"))
+
+        let empty = try JSON.decoder.decode(APIClient.AssistantState.self, from: Data("""
+        {"machine_id":"default","main_machine_id":"","launcher":"claude","cwd":"/home",
+         "main":"main-session","conversations":[]}
+        """.utf8))
+        #expect(empty.mainKey() == SessionKey(machineID: "default", sessionID: "main-session"))
     }
 
     @Test func conversationModelBodyEncodesMachineIdSnakeCase() throws {

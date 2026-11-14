@@ -5217,6 +5217,8 @@ struct Composer: View, Equatable {
     /// last model while the picker has not answered (the 11-13 Haiku/Opus divergence fix).
     private var assistantEffective: AssistantModelChoice.Effective? {
         guard isMainAssistantChat else { return nil }
+        // The response cache is unobserved; this small revision is the redraw signal after a fresh hub answer.
+        _ = model.assistantLauncherRevision
         return AssistantModelChoice.effective(session: model.session(key), response: model.cachedAssistantLaunchers(key.machineRef))
     }
     /// The model name the composer title and the modes menu row both show for the main chat, from the one effective
@@ -5769,10 +5771,10 @@ struct Composer: View, Equatable {
             }
         }
         // Keep the effective Main chat model fresh so the composer title matches what the next message runs (#6542):
-        // re-read when the conversation is replaced (/clear) or Model Settings change.
-        .task(id: "\(key.sessionID)-\(model.launchersRevision)") {
+        // re-read when the conversation changes, the hub publishes a new session revision, or Model Settings change.
+        .task(id: "\(key.sessionID)-\(model.session(key)?.rev ?? 0)-\(model.launchersRevision)") {
             guard assistantModelPickAvailable else { return }
-            _ = try? await model.assistantLaunchers(key.machineRef)
+            _ = try? await model.assistantLaunchers(key.machineRef, refresh: true)
         }
         .onChange(of: picks) { _, items in
             guard !items.isEmpty else { return }
