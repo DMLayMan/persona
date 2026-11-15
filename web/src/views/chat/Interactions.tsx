@@ -14,7 +14,6 @@ import type { Interaction } from "../../lib/types";
 import { defaults, elicitationDraft, elicitationResolution, elicitationSource, fields, numberInputMode, saveElicitationDraft, urlHost, urlTarget, validate, type ElicitationAction, type Field, type Values } from "../../lib/elicitation";
 import { answerLines } from "../../lib/answered";
 import { answerBlock, interactionCanAnswer, sessionTitle } from "../../lib/format";
-import { attachLive } from "../../lib/attach-live";
 import { interactionAsk } from "../../lib/inbox";
 import { plainMarkdown } from "../../lib/plain-markdown";
 import { cardToolName, mcpServerLabel } from "../../lib/turns";
@@ -1270,29 +1269,9 @@ export function AnsweredCard({ card }: { card: Answered }) {
  *  loads with the first card that carries one. A slot, not an import: Tasks imports this file. */
 export const underCard: { line?: (ix: Interaction & { disabled?: boolean }) => React.ReactNode; /** The cards (by id) Always was answered on: their line stays to say what was made. */ made?: Set<string> } = {};
 
-/** Under a card this page can't answer (#7497): why, and the one way to answer it here where there is one (Live link,
- *  the ⋯ menu's action). Once linked, the session's new row can approve, the card answers and this line goes. */
-function CardBlockedLine({ ix, block }: { ix: Interaction; block: "attach" | "computer" }) {
-  const [linking, setLinking] = useState(false);
-  const link = async () => {
-    setLinking(true);
-    try {
-      await attachLive(ix);
-    } finally {
-      setLinking(false);
-    }
-  };
-  return (
-    <div data-card-blocked={block} role="status" className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 px-1 text-xs text-attention">
-      <p className="min-w-0 flex-1 basis-64 [overflow-wrap:anywhere]">{t(block === "attach" ? "chat-interactions.blocked_attach" : "chat-interactions.blocked_computer")}</p>
-      {block === "attach" && (
-        <Button size="sm" icon="link" busy={linking} disabled={linking} onClick={() => void link()}>
-          {t("chat-chatview.attach")}
-        </Button>
-      )}
-    </div>
-  );
-}
+/** Under a card this page can't answer (#7497): why, and Live link where there is one. Its own chunk, loaded once the
+ *  browser is idle, since most cards are answerable; until it is in, the card stays as it is. */
+const CardBlockedLine = lazyPage(() => import("./CardBlockedLine").then((m) => m.CardBlockedLine), { idle: true });
 
 export function InteractionCard({ ix }: { ix: Interaction }) {
   // a child session's card on its parent's page (#5120): its row is the one the parent's chat holds (a paging hub's
@@ -1328,7 +1307,7 @@ export function InteractionCard({ ix }: { ix: Interaction }) {
             {/* a question a supervisor passed up may carry a suggested rule: its line goes under the card (#5802) */}
             <fieldset disabled={pending || (!canApprove && !managerWork)} className={canApprove ? "contents" : undefined}>{card}</fieldset>
             {/* a manager work card still takes its local defer and dismiss here: no "can't answer here" line */}
-            {block && !managerWork && <CardBlockedLine ix={ix} block={block} />}
+            {block && !managerWork && <Suspense fallback={null}><CardBlockedLine ix={ix} block={block} /></Suspense>}
             {underCard.line?.(canApprove ? ix : { ...ix, disabled: true })}
             </CardAbout.Provider>
           </AskedFrom.Provider>

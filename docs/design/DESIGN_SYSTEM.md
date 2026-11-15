@@ -1568,7 +1568,8 @@ Kinds: questions, plan approvals, tool approvals, secret entry, MCP forms, and w
   the ⋯ menu's **Live link** (same label, icon and action) beside it; once linked the card answers and the line goes.
   Otherwise: "This session can't be answered from here. Answer it on the computer." An answer on its way is a different
   state and keeps its own "Sending" line in the card's answer row. A manager work card (`persona_triage`) has no line:
-  its local defer and dismiss still work there. Web: `answerBlock` (`web/src/lib/format.ts`).
+  its local defer and dismiss still work there. Web: `answerBlock` (`web/src/lib/format.ts`); the line and Live link
+  load in their own chunk, off the first screen (`web/src/views/chat/CardBlockedLine.tsx`).
 - **A question the assistant answered** (iOS `DelegatedCard`, web `Delegated.tsx`, Android on Glass): no longer a pending request, so it is counted nowhere and has no Needs you row. The newest one for the Agent is a card over its chat's composer, after the Agent's own cards, until its × puts it away: "Answered by the assistant", each question with the answer as it is now, "Why: …", and Change Answer while the chat takes messages. Change Answer's sheet starts from the answers so far and sends only what changed, as a message to the Agent. Session Info lists every one with the same body and Change Answer.
 - **Everywhere at once**: the first decision on any surface (phone, web, notification, watch) wins. Every other entry updates at once, with a light haptic, and offers Undo where the action can be undone.
 

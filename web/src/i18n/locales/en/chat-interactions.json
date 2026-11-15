@@ -11,8 +11,6 @@
   "pending_sending": "Sending: {answer}",
   "pending_offline": "Sends when connected: {answer}",
   "hand_back": "Leave to computer",
-  "blocked_attach": "Link it live to answer it here, or answer it on the computer.",
-  "blocked_computer": "This session can't be answered from here. Answer it on the computer.",
   "question": "Question",
   "tool_loop_kicker": "Possible tool loop",
   "previous_question": "Previous question",

@@ -5,7 +5,7 @@
 // refresh() never reads an off-page session or a child its parent's chat holds: Live link reads that row itself.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 vi.hoisted(() => {
   window.matchMedia ??= ((query: string) => ({ matches: false, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false })) as typeof window.matchMedia;
 });
@@ -79,13 +79,22 @@ const flush = async () => {
 const line = () => host.querySelector<HTMLElement>("[data-card-blocked]");
 const option = (label: string) => [...host.querySelectorAll<HTMLButtonElement>("[data-card] button")].find((b) => b.textContent?.includes(label))!;
 const locked = (b: HTMLButtonElement) => b.disabled || !!b.closest("fieldset[disabled]");
-const render = (ix: Interaction = question) => act(() => root.render(<InteractionCard ix={ix} />));
+// the line is its own chunk (lazyPage): a render waits for it, as the page waits for the chunk once the browser is idle
+const render = async (ix: Interaction = question) => {
+  act(() => root.render(<InteractionCard ix={ix} />));
+  await flush();
+};
 const liveLink = async () => {
   const link = [...line()!.querySelectorAll("button")].find((b) => b.textContent === t("chat-chatview.attach"))!;
   expect(link.disabled).toBe(false);
   await act(async () => link.click());
   await flush();
 };
+
+// the module once, as the page has it from its idle preload: a render then waits only for lazyPage's own load
+beforeAll(async () => {
+  await import("./CardBlockedLine");
+});
 
 beforeEach(() => {
   setToken("tok");
@@ -108,36 +117,36 @@ describe("a card the page can't answer", () => {
   it("an unjoined thread's card says linking answers it here, and Live link makes it answerable", async () => {
     hub();
     upsertSession(unjoined);
-    render();
+    await render();
     expect(locked(option("A"))).toBe(true);
     expect(line()?.dataset.cardBlocked).toBe("attach");
-    expect(line()?.textContent).toContain(t("chat-interactions.blocked_attach"));
+    expect(line()?.textContent).toContain(t("chat-cardblocked.attach"));
     await liveLink();
     expect(attached).toEqual([expect.stringMatching(/\/sessions\/m\/s\/attach$/)]);
     expect(line()).toBeNull();
     expect(locked(option("A"))).toBe(false);
   });
 
-  it("a subagent its parent drives says to answer on the computer, with no Live link", () => {
+  it("a subagent its parent drives says to answer on the computer, with no Live link", async () => {
     upsertSession(subagent);
-    render();
+    await render();
     expect(locked(option("A"))).toBe(true);
-    expect(line()?.textContent).toBe(t("chat-interactions.blocked_computer"));
+    expect(line()?.textContent).toBe(t("chat-cardblocked.computer"));
     expect(line()?.querySelector("button")).toBeNull();
   });
 
-  it("an answerable card is as before: no line", () => {
+  it("an answerable card is as before: no line", async () => {
     upsertSession(row());
-    render();
+    await render();
     expect(locked(option("A"))).toBe(false);
     expect(line()).toBeNull();
   });
 
-  it("a manager work card has no line: its local defer and dismiss still work", () => {
+  it("a manager work card has no line: its local defer and dismiss still work", async () => {
     const work = { ...question, id: "work_1", tool_name: "persona_triage", questions: [{ question: "What next?", options: [{ label: "Handled, continue" }, { label: "Leave it", action: "defer" }] }] } as Interaction;
     Object.assign(getState(), { interactions: [work] });
     upsertSession(unjoined);
-    render(work);
+    await render(work);
     expect(line()).toBeNull();
     expect(locked(option("Leave it"))).toBe(false);
     expect(locked(option("Handled, continue"))).toBe(true);
@@ -153,7 +162,7 @@ describe("Live link on a paging hub", () => {
     hub();
     // what the card's exact summary lookup put among the row hints; the Agents list's page doesn't hold it
     rememberSessionRow({ ...unjoined, waiting: false });
-    render();
+    await render();
     expect(line()?.dataset.cardBlocked).toBe("attach");
     await liveLink();
     expect(attached).toEqual([expect.stringMatching(/\/sessions\/m\/s\/attach$/)]);
