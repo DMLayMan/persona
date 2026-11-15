@@ -54,7 +54,7 @@ const rereads = new Map<object, () => Promise<void>>();
  *  Live link, #7497): a child's card reads its parent's held row before the store's. Done when they answered. */
 export async function rereadHeldChild(mid: string, sid: string): Promise<void> {
   const key = rowKey(mid, sid);
-  await Promise.all([...held].filter(([, rows]) => rows.has(key)).map(([owner]) => rereads.get(owner)?.()));
+  await Promise.all([...held].filter(([, h]) => h.rows.has(key)).map(([owner]) => rereads.get(owner)?.()));
 }
 
 /** `heldChild`, kept up to date: a child's card and its request card read their row here. */
