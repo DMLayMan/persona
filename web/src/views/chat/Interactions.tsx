@@ -1302,7 +1302,8 @@ export function InteractionCard({ ix }: { ix: Interaction }) {
             <CardAbout.Provider value={about}>
             {/* a question a supervisor passed up may carry a suggested rule: its line goes under the card (#5802) */}
             <fieldset disabled={pending || (!canApprove && !managerWork)} className={canApprove ? "contents" : undefined}>{card}</fieldset>
-            {block && <CardBlockedLine ix={ix} block={block} />}
+            {/* a manager work card still takes its local defer and dismiss here: no "can't answer here" line */}
+            {block && !managerWork && <CardBlockedLine ix={ix} block={block} />}
             {underCard.line?.(canApprove ? ix : { ...ix, disabled: true })}
             </CardAbout.Provider>
           </AskedFrom.Provider>

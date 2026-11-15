@@ -1,26 +1,22 @@
 // @vitest-environment jsdom
 // A card this page can't answer says why (#7497), as iOS (#6868) and Android do: a Codex thread Persona hasn't joined
 // offers Live link, which makes the card answerable; any other session says to answer on the computer. An answerable
-// card has no line.
+// card has no line, and neither has a manager work card, whose local defer and dismiss still work. A paging hub's
+// refresh() never reads an off-page session or a child its parent's chat holds: Live link reads that row itself.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.hoisted(() => {
   window.matchMedia ??= ((query: string) => ({ matches: false, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false })) as typeof window.matchMedia;
 });
-const attached = vi.hoisted(() => [] as string[]);
-vi.mock("../../lib/api", async (original) => ({
-  ...await original<typeof import("../../lib/api")>(),
-  attachSession: vi.fn(async (mid: string, sid: string) => { attached.push(`${mid}/${sid}`); }),
-}));
-vi.mock("../../lib/store", async (original) => {
-  const real = await original<typeof import("../../lib/store")>();
-  // the hub's new row after the node joined the thread: it can approve now
-  return { ...real, refresh: vi.fn(async () => { real.upsertSession({ ...real.getSession("m", "s")!, capabilities: { read: true, send: true, approve: true, attach: false } }); }) };
-});
 import { InteractionCard } from "./Interactions";
+import { setToken } from "../../lib/api";
+import { SESSIONS_HIERARCHY_FEATURE } from "../../lib/child-sessions";
 import { answerBlock } from "../../lib/format";
-import { getState, reset, upsertSession } from "../../lib/store";
+import { SESSIONS_LOOKUP_FEATURE } from "../../lib/runtime-list";
+import { SESSIONS_LIST_FEATURE } from "../../lib/session-list";
+import { getState, rememberSessionRow, reset, upsertSession } from "../../lib/store";
+import { useChildSessions } from "../../lib/use-child-sessions";
 import { t } from "../../i18n";
 import type { Interaction, Session } from "../../lib/types";
 
@@ -28,7 +24,9 @@ import type { Interaction, Session } from "../../lib/types";
 
 const question = { id: "q_1", machine_id: "m", session_id: "s", kind: "question", questions: [{ question: "Which one?", options: [{ label: "A", description: "" }, { label: "B", description: "" }] }] } as Interaction;
 const row = (capabilities?: Session["capabilities"], source_kind?: string) => ({ machine_id: "m", session_id: "s", title: "Demo", state: "needs_you", source_kind, capabilities }) as Session;
-const unjoined = row({ read: true, send: true, approve: false, attach: true }, "codex_app_server");
+const unjoinedCaps = { read: true, send: true, approve: false, attach: true };
+const linkedCaps = { read: true, send: true, approve: true, attach: false };
+const unjoined = row(unjoinedCaps, "codex_app_server");
 const subagent = row({ read: true, send: false, approve: false, attach: false }, "codex_app_server");
 
 describe("answerBlock", () => {
@@ -45,18 +43,54 @@ describe("answerBlock", () => {
   });
 });
 
+// A hub with session m/s, a Codex thread its node joins on POST …/attach, after which it can approve. `parent`: s is
+// folded under p. A paging hub's Agents list (the bounded root page) never holds s.
+let linked = false;
+let attached: string[] = [];
+function hub(parent?: string) {
+  const full = () => ({ ...row(linked ? linkedCaps : unjoinedCaps, "codex_app_server"), cwd: "/w", status: "idle", folded_under: parent });
+  const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
+  const page = (sessions: unknown[]) => ({ sessions, remove: [], has_more: false, revision: "r1", total: sessions.length });
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const u = new URL(url, "http://x");
+    const q = u.searchParams;
+    if (init?.method === "POST" && u.pathname.endsWith("/attach")) {
+      attached.push(u.pathname);
+      linked = true;
+      return json({ ok: true });
+    }
+    if (u.pathname.endsWith("/interactions")) return json({ interactions: getState().interactions });
+    if (u.pathname.endsWith("/machines")) return json({ machines: [] });
+    if (!u.pathname.endsWith("/sessions")) return json({});
+    // a hub that pushes every row answers a plain read with all of them
+    if (!q.has("summary")) return json({ sessions: [full()] });
+    if (q.get("counts") === "1") return json({ total: 0, machine: {}, project: {}, group: {}, state: {}, revision: "r1" });
+    if (q.get("session_id") === "s") return json(page([q.get("summary") === "0" ? full() : { ...full(), waiting: false }]));
+    if (q.get("parent_session_id") === parent) return json(page([{ ...full(), waiting: false }]));
+    return json(page([]));
+  }));
+}
+
 let host: HTMLDivElement;
 let root: Root;
 const flush = async () => {
-  for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); });
+  for (let i = 0; i < 8; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 };
 const line = () => host.querySelector<HTMLElement>("[data-card-blocked]");
 const option = (label: string) => [...host.querySelectorAll<HTMLButtonElement>("[data-card] button")].find((b) => b.textContent?.includes(label))!;
 const locked = (b: HTMLButtonElement) => b.disabled || !!b.closest("fieldset[disabled]");
-const render = () => act(() => root.render(<InteractionCard ix={question} />));
+const render = (ix: Interaction = question) => act(() => root.render(<InteractionCard ix={ix} />));
+const liveLink = async () => {
+  const link = [...line()!.querySelectorAll("button")].find((b) => b.textContent === t("chat-chatview.attach"))!;
+  expect(link.disabled).toBe(false);
+  await act(async () => link.click());
+  await flush();
+};
 
 beforeEach(() => {
-  attached.length = 0;
+  setToken("tok");
+  linked = false;
+  attached = [];
   Object.assign(getState(), { interactions: [question], answered: {} });
   host = document.createElement("div");
   document.body.append(host);
@@ -67,20 +101,19 @@ afterEach(() => {
   act(() => root.unmount());
   host.remove();
   reset();
+  vi.unstubAllGlobals();
 });
 
 describe("a card the page can't answer", () => {
   it("an unjoined thread's card says linking answers it here, and Live link makes it answerable", async () => {
+    hub();
     upsertSession(unjoined);
     render();
     expect(locked(option("A"))).toBe(true);
     expect(line()?.dataset.cardBlocked).toBe("attach");
     expect(line()?.textContent).toContain(t("chat-interactions.blocked_attach"));
-    const link = [...line()!.querySelectorAll("button")].find((b) => b.textContent === t("chat-chatview.attach"))!;
-    expect(link.disabled).toBe(false);
-    await act(async () => link.click());
-    await flush();
-    expect(attached).toEqual(["m/s"]);
+    await liveLink();
+    expect(attached).toEqual([expect.stringMatching(/\/sessions\/m\/s\/attach$/)]);
     expect(line()).toBeNull();
     expect(locked(option("A"))).toBe(false);
   });
@@ -98,5 +131,51 @@ describe("a card the page can't answer", () => {
     render();
     expect(locked(option("A"))).toBe(false);
     expect(line()).toBeNull();
+  });
+
+  it("a manager work card has no line: its local defer and dismiss still work", () => {
+    const work = { ...question, id: "work_1", tool_name: "persona_triage", questions: [{ question: "What next?", options: [{ label: "Handled, continue" }, { label: "Leave it", action: "defer" }] }] } as Interaction;
+    Object.assign(getState(), { interactions: [work] });
+    upsertSession(unjoined);
+    render(work);
+    expect(line()).toBeNull();
+    expect(locked(option("Leave it"))).toBe(false);
+    expect(locked(option("Handled, continue"))).toBe(true);
+  });
+});
+
+describe("Live link on a paging hub", () => {
+  beforeEach(() => {
+    Object.assign(getState(), { loaded: true, features: [SESSIONS_LIST_FEATURE, SESSIONS_LOOKUP_FEATURE, SESSIONS_HIERARCHY_FEATURE] });
+  });
+
+  it("an off-page session's card answers once linked: its exact lookup reads the new row", async () => {
+    hub();
+    // what the card's exact summary lookup put among the row hints; the Agents list's page doesn't hold it
+    rememberSessionRow({ ...unjoined, waiting: false });
+    render();
+    expect(line()?.dataset.cardBlocked).toBe("attach");
+    await liveLink();
+    expect(attached).toEqual([expect.stringMatching(/\/sessions\/m\/s\/attach$/)]);
+    expect(line()).toBeNull();
+    expect(locked(option("A"))).toBe(false);
+  });
+
+  it("a child's card on its parent's page answers once linked: the parent's held children are read again", async () => {
+    hub("p");
+    const kid = { ...question, folded_under: "p" } as Interaction;
+    Object.assign(getState(), { interactions: [kid] });
+    function Parent() {
+      useChildSessions("m", "p", true);
+      return <InteractionCard ix={kid} />;
+    }
+    act(() => root.render(<Parent />));
+    await flush();
+    expect(locked(option("A"))).toBe(true);
+    expect(line()?.dataset.cardBlocked).toBe("attach");
+    await liveLink();
+    expect(attached).toEqual([expect.stringMatching(/\/sessions\/m\/s\/attach$/)]);
+    expect(line()).toBeNull();
+    expect(locked(option("A"))).toBe(false);
   });
 });
