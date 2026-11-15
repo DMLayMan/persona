@@ -1269,9 +1269,9 @@ export function AnsweredCard({ card }: { card: Answered }) {
  *  loads with the first card that carries one. A slot, not an import: Tasks imports this file. */
 export const underCard: { line?: (ix: Interaction & { disabled?: boolean }) => React.ReactNode; /** The cards (by id) Always was answered on: their line stays to say what was made. */ made?: Set<string> } = {};
 
-/** Under a card this page can't answer (#7497): why, and Live link where there is one. Its own chunk, loaded once the
- *  browser is idle, since most cards are answerable; until it is in, the card stays as it is. */
-const CardBlockedLine = lazyPage(() => import("./CardBlockedLine").then((m) => m.CardBlockedLine), { idle: true });
+/** Under a card this page can't answer (#7497): why, and Live link where there is one. Its own chunk, loaded with the
+ *  first blocked card, since most cards are answerable; until it is in, the card stays as it is. */
+const CardBlockedLine = lazyPage(() => import("./CardBlockedLine").then((m) => m.CardBlockedLine));
 
 export function InteractionCard({ ix }: { ix: Interaction }) {
   // a child session's card on its parent's page (#5120): its row is the one the parent's chat holds (a paging hub's

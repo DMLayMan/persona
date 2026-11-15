@@ -1,6 +1,6 @@
 // Under a card this page can't answer (#7497): why, and the one way to answer it here where there is one (Live link,
 // the ⋯ menu's action). Once linked, the session's new row can approve, the card answers and this line goes. Off the
-// first screen: Interactions.tsx loads it (lazyPage, idle) only for the few cards that are blocked, with its strings
+// first screen and the idle tier: Interactions.tsx loads it (lazyPage) with the first card that is blocked, its strings
 // (`chat-cardblocked`) in the rest of the catalog.
 import { useState } from "react";
 import { t } from "../../i18n";
