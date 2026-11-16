@@ -151,9 +151,16 @@ export interface SessionCapabilities {
   rename?: boolean;
   /** The permission mode and effort chips can change it (session.modes, #1843): the node's word, absent from older nodes. */
   modes?: boolean;
+  /** The permission modes session.modes takes for an agent that is not Claude Code (#8261): its own approval
+   *  (`default`) and, where it has one, Full access. With two or more the composer switches between them (lib/session-actions.ts
+   *  `listedModes`); absent from older nodes, and where `modes` is true. */
+  permission_modes?: string[];
   /** Returning to before a user message, with optional native file restoration. */
   rewind?: boolean;
   rewind_code?: boolean;
+  /** A Claude outside Persona's terminals with Persona's plugin: your own messages go in as your input while it rests
+   *  (docs/integrations/claude-integration.md "Owner input through the Persona plugin"). Absent from older nodes. */
+  plugin_input?: boolean;
 }
 
 /** A session's work state (docs/assistant/agent-work.md): working, blocked on a named precondition, or done. */
@@ -224,6 +231,8 @@ export interface Port {
 }
 
 export interface Session {
+  /** Explicit references to a deleted Assistant conversation return a scrubbed tombstone. */
+  deleted?: boolean;
   /** The engine host it lives in (herdr, herdr-core, orca, paseo…), and the other hosts it is live in at once (#2576). */
   host?: string;
   also_open_in?: string[];
@@ -817,6 +826,8 @@ export interface Interaction {
   questions?: Question[];
   plan?: string;
   tool_input?: Record<string, unknown>;
+  /** The outgoing text the server lets the user edit before Allow, only for a Claude Code Lark send/reply card. */
+  editable_text?: string;
   summary?: string;
   screen?: string;
   secret?: boolean;
@@ -880,8 +891,8 @@ export interface Delegate {
 
 export interface Launcher {
   name: string;
-  /** A Persona-managed provider's name for people, any language (#5029); absent for an rc alias or from an older hub.
-   *  Show it through lib/provider-names.ts. */
+  /** A Persona-managed provider's name for people, any language (#5029), or a runtime's name for a provider it runs
+   *  (Paseo's label, "Grok", #8261); absent for an rc alias or from an older hub. Show it through lib/provider-names.ts. */
   display_name?: string;
   model?: string;
   /** What it starts when not Claude Code ("codex"); agent_type: what the hub's machine config says it runs. */
@@ -890,6 +901,10 @@ export interface Launcher {
   /** A Codex launcher the computer starts with no first message too; absent from an older computer, whose Codex
    *  starts need one. */
   prompt_optional?: boolean;
+  /** The permission modes a start on a runtime's provider of another agent takes (#8261, Paseo's): its own approval
+   *  (`default`, sent as no mode) and, where it has one, Full access. Such a launcher's start also takes only the efforts
+   *  its model lists (lib/launcher-models.ts `effortRule`). Absent: Claude Code's five, or none. */
+  permission_modes?: string[];
   /** A Codex launcher the computer starts in a shell pane the user picked (Run agent here), keeping that pane when the
    *  start fails (#5504); absent from an older computer, where Run agent here offers Claude Code only. */
   run_here?: boolean;

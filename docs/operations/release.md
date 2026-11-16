@@ -524,6 +524,21 @@ A private configuration has only these fields, with no secrets:
   `releases/latest/download` never sees a manifest whose files are not there yet.
 - A receipt that carries `android.json` (the Android platform's) must ship the
   APK it names, at its size and sha256, for the tag's version.
+- Windows CLI bundles (`Persona-<version>-windows-<arch>.zip`) also require a
+  native verification report before upload (#8338). On Windows of that
+  architecture, run `python scripts/operations/windows_release.py --archive
+  <archive.zip> --version <version> --build <build>`. It runs the bundled
+  `persona-link version`, `personad version -v`, and `personad node-update-check`
+  with time limits, without installing or starting services. Success writes
+  `<archive-stem>.verification.json` beside the ZIP; failure removes a previous
+  report. Include the ZIP, report and `BUILD.json` or `latest.json` in the
+  private artifact receipt. The coordinator checks the requested version,
+  build, command results, ZIP digest and executable digests before any upload.
+  This report is output from the trusted release pipeline, preventing stale or
+  mismatched verification; it is not a signed attestation against a malicious
+  publisher. Cross-compilation or a matching build number alone does not prove
+  the Windows programs report the intended version. A missing Windows runner
+  is an explicit publication prerequisite, not a passed or skipped check.
 
 For the first release, merge this consumer's PR before pushing `v0.1.0` from
 the merged `main` commit. The public workflow creates the Release and image;
@@ -567,6 +582,20 @@ version codes and update each other:
 
   A hub reads it beside `latest.json` to offer the APK to its phones (#5563). A prerelease tag's APK is attached to
   its Release, but `releases/latest/download` never points at a prerelease.
+
+### Android build commit
+
+Settings › About shows the commit an Android APK was built from ([android.md](../android/android.md) "Build commit"). Release
+builds pass it explicitly: `android_release_worker.py` adds `-PpersonaBuildCommit=<sha>` with the full sha it checked out (the
+same value as the receipt's `source_sha`, for main-branch and version-tag builds), and `scripts/app/android.sh release` passes
+this repository's `HEAD`. Version names, version codes, signing and R8 are unchanged.
+
+- **Receipt reuse**: `build.json` records `build_commit` (the full sha). A run directory whose `unsigned.apk` receipt has no
+  `build_commit`, or one that is not the source sha, is built again; an `unsigned.apk` made before this metadata existed is never
+  published, and nobody has to delete the directory by hand.
+- **Check before keeping the APK**: after `:app:assembleRelease` and the R8 check, and before `unsigned.apk` is copied,
+  `scripts/release/check_android_build_commit.py` reads `persona_build_commit` with `aapt2 dump resources` and fails unless it equals
+  the source sha. A build without the injection, with a wrong value, or one that left an old APK behind stops there and writes no receipt.
 
 ## Android publisher repository migration and status retries
 

@@ -1,5 +1,22 @@
 # Lessons: web UI and interactions
 
+## A refused credential-mirror write must not erase the readable legacy login (#9023)
+
+Migration reads are on the startup path, so a `setItem` quota or permission failure can otherwise leave the whole app blank before any page boundary mounts. Return the already-read legacy token and its matching device id when the canonical mirror cannot be written; `storedValue` must use that same accepted fallback, never revive a legacy token beside an orphan canonical id or override a canonical empty sign-out. Re-read the canonical value after attempting migration so another tab's newer write still wins. Test token and device-id write failures separately, plus a real browser startup with synthetic storage; never clear a user's profile to make the migration succeed.
+
+## Compact buttons need their touch targets when moved into a dialog (#7446)
+
+The shared `Button` is drawn 32 px tall. Keep `touch-hit` on every dialog, file-picker and Undo action when replacing
+an older `min-h-11` button. Its pseudo-element expands the target without changing the drawn box: browser acceptance
+must check coarse-pointer hit testing and actual edge taps, rather than the button's bounding rectangle alone.
+
+## Drop targets must cancel navigation before filtering drag types or busy states (#7446)
+
+Cancel every `dragover` and `drop` default before filtering for files or a busy state: ignoring a link, text or a
+second file must not let the browser navigate away from the app. Keep the file-type and busy guards on the upload
+and drag highlight. `Skills.test.tsx` checks link/text drags without upload or highlight, and both file events while
+a ZIP preview is pending, including that the first check completes and no second check starts.
+
 ## A paging hub pushes no sessions: a computer's Agents are not in `sessions[mid]` (web audit items 3 and 30)
 
 A connection that asked for `sessions_list` gets no `sessions` / `sessions_delta` pushes (docs/protocol/protocol.md
@@ -57,8 +74,12 @@ tasks on a 4x-throttled phone, none with 74 Agents). Sidebar folds are lazy by d
 folded group's rows (to check they are inert) opens the group first. Two smaller costs hid behind the big DOM: each
 group heading read its height in a layout effect (`getBoundingClientRect`), and one set a custom property on the
 scroller, which restyles everything under it before the next heading's read. Take such heights from a
-`ResizeObserver`: its first report comes after the browser's own layout and before the paint, and `flushSync` applies
-state from it in that frame. Measure with a production build (`vite preview`), CDP CPU throttling and a `longtask`
+`ResizeObserver`: its first report comes after the browser's own layout and before the paint. Do not synchronously flush
+another React layout pass from that delivery: the shared group-heading observer did that and reproduced
+`ResizeObserver loop completed with undelivered notifications` in the desktop smoke. Let React batch those reports, and
+verify the real browser console, not only a jsdom test. A callback's target or timestamp alone does not identify the
+writer; use a before/after control and keep the warning in the verdict (`web/e2e/sidebar-resize-observer.mjs`, #7701).
+Measure with a production build (`vite preview`), CDP CPU throttling and a `longtask`
 observer, against the same mock with fewer sessions (`web/e2e/sidebar-many-agents.mjs`).
 
 Dropping what is not drawn has three costs to pay for. A broadcast to mounted listeners (Collapse all / Expand all)
@@ -1327,3 +1348,12 @@ code that tells "above" from "below" by `boundingClientRect.top < rootBounds.top
 the view" matters, open the view far below the scroller (`rootMargin: "0px 0px 1000000px 0px"`): a mark is then either
 in it or above it, and every change between the two is reported (`watchPin` in `web/src/views/SidebarSection.tsx`, the
 sidebar's pinned headings). Check such code with a jump, not only with a scroll a few pixels at a time.
+
+## An uncertain send must keep the computer's reason, not a generic "not sure" (#8975)
+
+`failureText` turned every `delivered: unknown` into "Not sure it arrived. Check the chat", under the failed bubble's
+"Not sent:" prefix, and **Check** could only find the same unknown receipt. A message a Claude desktop session held for
+approval (bypass permissions mode holds Persona's peer messages) read as "Not sent: not sure it arrived" forever, and the
+owner retyped it on the computer. Keep the node's code on the entry and word the bubble from it (`entryReason`, also for
+entries kept from before), draw an uncertain one as waiting (caution color, no "Not sent"), and make a Check that finds
+nothing new say so. The node tells held from merely unconfirmed by the session's permission mode (`peer_held`).

@@ -1,7 +1,7 @@
 # Android interface styles and design system
 
 Since 2026-10-31, the Android App's visuals and interaction have been redone wholesale. As the user asked, all three directions became themes, switched in **Settings › Interface style**; the default is **Glass**.
-The old design (the parts of `docs/archive/redesign/` about appearance, layout and interaction, and the HTML prototypes in `prototypes/android/`) is superseded by this document.
+The old design (the parts of `docs/archive/redesign/` about appearance, layout and interaction, and the HTML prototypes removed in #9030) is superseded by this document.
 
 ## 1. Three styles
 
@@ -72,6 +72,7 @@ Performance measurements are in section 5.
 | `PersonaTheme.glass` | the glass level actually rendered |
 | `SpinnerTokens` | `JSpinner`'s fixed stroke widths; `compactStroke` is the 1.8dp compact activity arc, not density-scaled spacing |
 | `ContentTokens` | Existing mail, media, profile, reaction and task-content dimensions that cannot be expressed by the common spacing tokens; keeps page geometry unchanged while adopting tokens |
+| `RichTextTokens` | Rich-message geometry outside the common scale, including content-driven Markdown table minimum / maximum column widths (160 / 220 dp before applying the message's font scale) |
 
 Material 3's ColorScheme, Typography and Shapes are also generated from the current style, so Material components not yet replaced change colors and fonts along with it, but pages should switch to the components below.
 The old `PersonaTypography.*`, `statusTone(...)`, `PrimaryButton` / `SecondaryButton` / `Card` / `EmptyState` still work and now map to the current style internally; new code uses the new components directly.
@@ -270,6 +271,10 @@ and the Duo's inner screen; a phone, folded or not, is narrower than 600dp uprig
   as in the Duo's Agents tab; the avatar there still opens the sidebar as the drawer, so Settings stays one sidebar away from both pages. Folding turns the column back into the drawer (closed)
   and unfolding back into the column; unfolding with the drawer open over the Assistant page shows the column instead. The drawer and the column keep separate saveable state (`shared-sidebar`, `shared-sidebar-column`):
   the Assistant page stays composed behind Agents, so both can be composed at once.
+- **Full-window search** (`AssistantFullSearch`, #9171): in a regular window the sidebar's Search opens over the whole window as the open iPhone Duo's chats-only full search (`AssistantFullSearch` on iOS
+  with `onOpenAgent` nil): the field at the foot above the keyboard (`imePadding`), a close button beside it, Persona's chats above (latest first), filtered as typed with the same local matches and
+  manager search (`assistant_search`) the sidebar uses. A row opens that chat beside the column and closes the search; Close and system Back close it too. Compact (folded) windows keep today's
+  drawer search unchanged. The two-scope (Chats | Agents) version belongs to the Sidebar layout and is not part of this.
 - Two panes use Navigation 3's list-detail scene (`rememberListDetailSceneStrategy`); the shell centrally assigns list and detail roles (`paneMetadata` in `Root.kt`):
   Agents' "computer → space → session" tree | chat (terminal takeover also in the right pane); Inbox list | Lark conversation / email; settings categories | settings subpage (all settings subpages therefore use navigation).
   Persona's main chat does not split. An unselected right pane shows a placeholder. A detail with no list under it (Computers or an extension page opened from the sidebar over the Assistant page)
