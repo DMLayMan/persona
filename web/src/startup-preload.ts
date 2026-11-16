@@ -348,7 +348,12 @@ export async function brotliCopies(dir: string, files: string[]): Promise<{ file
 // list), a busy fleet's hints wait for a window counted from when the last read came back, and a reconnect reads the
 // Agents list at once. 80 B in ja, measured in one environment against main 211207fd5f: ja 480,708 B to 480,788 B
 // (en 477,579 B to 477,659 B, zh-Hans 478,398 B to 478,478 B). The budget takes the 53 B over.
-export const FIRST_SCREEN_BUDGET = 480_788;
+// #9132: a finished reply's Sources row is a chunk of its own (views/chat/TurnSources.tsx with lib/turn-sources.ts and
+// its words); the first screen keeps only SegmentView's check for a web call and the lazy entry. 88 B in each language,
+// measured in one environment against main c28daf137 (ja 480,724 B to 480,812 B; en 477,595 B to 477,683 B, zh-Hans
+// 478,414 B to 478,502 B), the smallest of four layouts tried (mounting it under every exchange, or riding the reply
+// bar's chunk, cost 113–232 B). The budget takes the 24 B over.
+export const FIRST_SCREEN_BUDGET = 480_812;
 // The hash in a built file's name: the 8 characters of Rollup's [hash] (url-safe base64) between "-" and the
 // extension, as vite.config.ts names every chunk and asset ("assets/[name]-[hash].js", "[name]-[hash][extname]").
 const NAME_HASH = /-([A-Za-z0-9_-]{8})\.[^./]+$/;
