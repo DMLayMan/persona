@@ -1415,7 +1415,7 @@ export function InteractionCard({ ix }: { ix: Interaction }) {
   // summary, which the store's complete rows never have)
   const child = useChildRow(ix.machine_id, ix.session_id);
   const block = useStore(() => answerBlock(ix, child ?? getSession(ix.machine_id, ix.session_id)));
-  const canApprove = block === null;
+  const canApprove = !block;
   const managerWork = ix.kind === "question" && ix.tool_name === "persona_triage";
   // an answer still on its way (the hub away, apiOp retrying) holds the card, also after leaving the chat and coming back
   const { pending, line } = usePendingLine(ix);
