@@ -344,7 +344,13 @@ export async function brotliCopies(dir: string, files: string[]): Promise<{ file
 // text (cardText) moves to the Inbox page's lib/inbox-page.ts and takes 150 B off: ja 480,666 B to 480,640 B (en
 // 477,537 B to 477,511 B, zh-Hans 478,356 B to 478,330 B), measured in one environment against main 576970b459; merged
 // with main 27a828ec48 (#9146 above): en 477,579 B, ja 480,708 B, zh-Hans 478,398 B, 27 B of room.
-export const FIRST_SCREEN_BUDGET = 480_735;
+// #7497: a card the page can't answer says why (views/chat/CardBlockedLine.tsx, a chunk of its own loaded with the first
+// blocked card; lib/format.ts answerBlock), and Live link moves out of lib/agent-actions.ts into lib/attach-live.ts,
+// loaded with the click. 37 B in ja, measured in one environment against main ebb500c753 (ja 480,708 B to 480,745 B;
+// en 477,579 B to 477,616 B, zh-Hans 478,398 B to 478,435 B), so the budget takes the 10 B ja overage. Kept the
+// smallest of three layouts: one lazy Live link wrapper in lib/agent-actions.ts measured ja 480,765 B, and the line
+// working out its own reason 480,802 B (its chunk then imports five more first-screen names).
+export const FIRST_SCREEN_BUDGET = 480_745;
 // The hash in a built file's name: the 8 characters of Rollup's [hash] (url-safe base64) between "-" and the
 // extension, as vite.config.ts names every chunk and asset ("assets/[name]-[hash].js", "[name]-[hash][extname]").
 const NAME_HASH = /-([A-Za-z0-9_-]{8})\.[^./]+$/;
