@@ -3,7 +3,7 @@
 // offers Live link, which makes the card answerable; any other session says to answer on the computer. An answerable
 // card has no line, and neither has a manager work card, whose local defer and dismiss still work. A paging hub's
 // refresh() never reads an off-page session or a child its parent's chat holds: Live link reads that row itself.
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 vi.hoisted(() => {
@@ -73,23 +73,40 @@ function hub(parent?: string) {
 
 let host: HTMLDivElement;
 let root: Root;
-const flush = async () => {
-  for (let i = 0; i < 8; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
-};
 const line = () => host.querySelector<HTMLElement>("[data-card-blocked]");
 const option = (label: string) => [...host.querySelectorAll<HTMLButtonElement>("[data-card] button")].find((b) => b.textContent?.includes(label))!;
 const locked = (b: HTMLButtonElement) => b.disabled || !!b.closest("fieldset[disabled]");
-// the line is its own chunk (lazyPage): a render waits for it, as the page waits for the chunk once the browser is idle
-const render = async (ix: Interaction = question) => {
-  act(() => root.render(<InteractionCard ix={ix} />));
-  await flush();
+// Waits until `check` holds: the lazy line, a hub read and a reread take as many turns as they take. Every wait is its own
+// act, so what resolves meanwhile (the line's chunk included) lands in one and is rendered before the next check; one act
+// around the whole wait would hold Suspense's retry until it ended. Bounded, so a change that never comes fails here.
+const until = async (check: () => void, timeout = 3000) => {
+  const end = Date.now() + timeout;
+  for (;;) {
+    await act(() => new Promise((r) => setTimeout(r, 10)));
+    try {
+      return check();
+    } catch (e) {
+      if (Date.now() > end) throw e;
+    }
+  }
+};
+const render = (ui: ReactNode) => act(async () => root.render(ui));
+// A blocked card: its line is its own chunk (lazyPage), so wait for the line itself, not a number of turns.
+const renderBlocked = async (ui: ReactNode) => {
+  await render(ui);
+  await until(() => expect(line()).not.toBeNull());
 };
 const liveLink = async () => {
   const link = [...line()!.querySelectorAll("button")].find((b) => b.textContent === t("chat-chatview.attach"))!;
   expect(link.disabled).toBe(false);
   await act(async () => link.click());
-  await flush();
+  await until(() => expect(attached).toHaveLength(1));
 };
+// Linked: the session's new row reaches the card, which answers, and the line goes.
+const answersOnceLinked = () => until(() => {
+  expect(line()).toBeNull();
+  expect(locked(option("A"))).toBe(false);
+});
 
 // the module once, as the page has it from its idle preload: a render then waits only for lazyPage's own load
 beforeAll(async () => {
@@ -117,19 +134,18 @@ describe("a card the page can't answer", () => {
   it("an unjoined thread's card says linking answers it here, and Live link makes it answerable", async () => {
     hub();
     upsertSession(unjoined);
-    await render();
+    await renderBlocked(<InteractionCard ix={question} />);
     expect(locked(option("A"))).toBe(true);
     expect(line()?.dataset.cardBlocked).toBe("attach");
     expect(line()?.textContent).toContain(t("chat-cardblocked.attach"));
     await liveLink();
+    await answersOnceLinked();
     expect(attached).toEqual([expect.stringMatching(/\/sessions\/m\/s\/attach$/)]);
-    expect(line()).toBeNull();
-    expect(locked(option("A"))).toBe(false);
   });
 
   it("a subagent its parent drives says to answer on the computer, with no Live link", async () => {
     upsertSession(subagent);
-    await render();
+    await renderBlocked(<InteractionCard ix={question} />);
     expect(locked(option("A"))).toBe(true);
     expect(line()?.textContent).toBe(t("chat-cardblocked.computer"));
     expect(line()?.querySelector("button")).toBeNull();
@@ -137,7 +153,7 @@ describe("a card the page can't answer", () => {
 
   it("an answerable card is as before: no line", async () => {
     upsertSession(row());
-    await render();
+    await render(<InteractionCard ix={question} />);
     expect(locked(option("A"))).toBe(false);
     expect(line()).toBeNull();
   });
@@ -146,7 +162,7 @@ describe("a card the page can't answer", () => {
     const work = { ...question, id: "work_1", tool_name: "persona_triage", questions: [{ question: "What next?", options: [{ label: "Handled, continue" }, { label: "Leave it", action: "defer" }] }] } as Interaction;
     Object.assign(getState(), { interactions: [work] });
     upsertSession(unjoined);
-    await render(work);
+    await render(<InteractionCard ix={work} />);
     expect(line()).toBeNull();
     expect(locked(option("Leave it"))).toBe(false);
     expect(locked(option("Handled, continue"))).toBe(true);
@@ -162,12 +178,11 @@ describe("Live link on a paging hub", () => {
     hub();
     // what the card's exact summary lookup put among the row hints; the Agents list's page doesn't hold it
     rememberSessionRow({ ...unjoined, waiting: false });
-    await render();
+    await renderBlocked(<InteractionCard ix={question} />);
     expect(line()?.dataset.cardBlocked).toBe("attach");
     await liveLink();
+    await answersOnceLinked();
     expect(attached).toEqual([expect.stringMatching(/\/sessions\/m\/s\/attach$/)]);
-    expect(line()).toBeNull();
-    expect(locked(option("A"))).toBe(false);
   });
 
   it("a child's card on its parent's page answers once linked: the parent's held children are read again", async () => {
@@ -178,13 +193,11 @@ describe("Live link on a paging hub", () => {
       useChildSessions("m", "p", true);
       return <InteractionCard ix={kid} />;
     }
-    act(() => root.render(<Parent />));
-    await flush();
+    await renderBlocked(<Parent />);
     expect(locked(option("A"))).toBe(true);
     expect(line()?.dataset.cardBlocked).toBe("attach");
     await liveLink();
+    await answersOnceLinked();
     expect(attached).toEqual([expect.stringMatching(/\/sessions\/m\/s\/attach$/)]);
-    expect(line()).toBeNull();
-    expect(locked(option("A"))).toBe(false);
   });
 });
