@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  addGroup, compareRunsKey, getGroup, groupOfSession, loadGroups, MAX_GROUPS, resetGroupsCache, runBranches, runSession, runStatus, updateRun,
+  addGroup, compareMenu, compareRunsKey, getGroup, groupOfSession, loadGroups, MAX_GROUPS, resetGroupsCache, runBranches, runSession, runStatus, updateRun,
   type CompareGroup, type RunContext,
 } from "./compare-runs";
 import type { AgentLaunch } from "./new-agent";
 import type { Session } from "./types";
+import { t } from "../i18n";
 
 const session = (over: Partial<Session> = {}): Session => ({ machine_id: "computer", session_id: "s1", title: "Synthetic run", cwd: "/projects/demo-1", status: "idle", ...over }) as Session;
 const group = (over: Partial<CompareGroup> = {}): CompareGroup => ({
@@ -61,6 +62,12 @@ describe("the list in this browser", () => {
     expect(groupOfSession(session({ session_id: "s9", cwd: "/projects/demo-2" }))?.id).toBe("g1");
     expect(groupOfSession(session({ session_id: "s9", cwd: "/projects/elsewhere" }))).toBeUndefined();
     expect(groupOfSession(session({ machine_id: "other" }))).toBeUndefined();
+  });
+
+  it("gives the chat menu its item, in the page's own words", () => {
+    addGroup(group({ runs: [{ n: 1, branch: "b-1", phase: "launched", sid: "s1" }, { n: 2, branch: "b-2", phase: "waiting" }] }));
+    expect(compareMenu(session())).toEqual({ id: "g1", label: t("compare-runs.title") });
+    expect(compareMenu(session({ session_id: "s9" }))).toBeUndefined();
   });
 });
 

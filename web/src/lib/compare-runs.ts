@@ -7,6 +7,7 @@ import { useSyncExternalStore } from "react";
 import { BASE } from "./base";
 import type { AgentLaunch } from "./new-agent";
 import type { Session } from "./types";
+import { t } from "../i18n";
 
 export const MIN_RUNS = 2;
 export const MAX_RUNS = 4;
@@ -213,6 +214,12 @@ const trimSlash = (p: string) => p.replace(/\/+$/, "");
 export function groupOfSession(s: Session): CompareGroup | undefined {
   const one = { [s.machine_id]: [s] };
   return groupsNow().find((g) => g.mid === s.machine_id && g.runs.some((r) => runSession(r, g.mid, one) === s));
+}
+
+/** The chat menu's item for a run (views/chat/ChatView.tsx loads this file after the first screen, so its words are here). */
+export function compareMenu(s: Session): { id: string; label: string } | undefined {
+  const g = groupOfSession(s);
+  return g && { id: g.id, label: t("compare-runs.title") };
 }
 
 /** How a run stands, as its card says it:

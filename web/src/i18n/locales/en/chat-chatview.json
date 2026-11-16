@@ -129,6 +129,5 @@
   "todo_completed_label": "To-do (Completed): {title}",
   "export": "Export Conversation…",
   "side_sessions_count": "Side sessions ({count})",
-  "side_sessions_needs_you": "A side session needs you",
-  "compare_runs": "Compare runs"
+  "side_sessions_needs_you": "A side session needs you"
 }
