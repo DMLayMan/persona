@@ -82,6 +82,12 @@ describe("the Sources row", () => {
     expect(chips().map((a) => a.textContent)).toEqual(["Tuesday", "Wednesday", "o.example.com"]);
   });
 
+  it("counts www. and letter case as the same site when telling pages apart", async () => {
+    const mixed = call("WebSearch", { query: "q" }, `Links: ${JSON.stringify([{ title: "With www", url: "https://www.example.com/a" }, { title: "Bare", url: "https://example.com/b" }, { title: "Upper", url: "HTTPS://WWW.Example.COM/c" }])}`);
+    await draw([ask(), ...mixed, done()]);
+    expect(chips().map((a) => a.textContent)).toEqual(["With www", "Bare", "Upper"]);
+  });
+
   it("shows three, then +N, which shows the rest and Show less", async () => {
     await draw([ask(), ...search(5), done()]);
     expect(chips()).toHaveLength(3);
@@ -120,5 +126,6 @@ describe("siteOf", () => {
   it("is the host without www.", () => {
     expect(siteOf("https://www.example.com/a?b")).toBe("example.com");
     expect(siteOf("HTTPS://Docs.Example.org/")).toBe("docs.example.org");
+    expect(siteOf("https://WWW.Example.com/")).toBe("example.com");
   });
 });

@@ -17,13 +17,16 @@ import { t } from "../../i18n";
 /** Pages shown before +N (as the changed-files card shows three files). */
 export const VISIBLE_SOURCES = 3;
 
-/** The page's site, as people say it: the host without "www.". */
+/** The page's site, as people say it: the host in lower case, without "www.". The chip shows it and the same-site check
+ *  compares it, so pages a reader sees as one site are always told apart by their titles. */
 export function siteOf(url: string): string {
+  let host: string;
   try {
-    return new URL(url).hostname.replace(/^www\./, "");
+    host = new URL(url).hostname;
   } catch {
-    return url;
+    host = url;
   }
+  return host.toLowerCase().replace(/^www\./, "");
 }
 
 const CHIP = "flex h-7 min-w-0 items-center gap-1.5 rounded-control bg-surface px-2 text-label text-ink-2 shadow-btn transition-colors hover:bg-hover hover:text-ink [@media(pointer:coarse)]:h-9";
