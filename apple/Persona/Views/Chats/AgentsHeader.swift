@@ -60,6 +60,8 @@ nonisolated enum AgentsSearchVisibility {
     var rowsUnder = false
     /// The field floats in the bar's row: searching, and until it has come back down after.
     var floating = false
+    /// Identifies the field waiting for its keyboard. A callback from a previous field cannot raise a new one.
+    @ObservationIgnored private(set) var pendingSearch: UUID?
     /// Where the field is on its way, animated: up in the bar's row (searching) or down in the list's row. What moves
     /// follows it (`AgentsSearchOverlay`, `ListShift`, `AgentsTopBarFade`); the page's `searching` changes without an
     /// animation, so the list's rows (links at rest, buttons while searching) are not cross-faded.
@@ -151,6 +153,40 @@ nonisolated enum AgentsSearchVisibility {
             r = next
         }
         return nil
+    }
+
+    func startSearch() -> UUID {
+        let start = UUID()
+        pendingSearch = start
+        floating = true
+        return start
+    }
+
+    /// Both the keyboard and the fallback can complete the start. Only the current one can do so, once.
+    func completeSearchStart(_ start: UUID?, listInFront: Bool) -> Bool {
+        guard floating, let start, pendingSearch == start else { return false }
+        if !listInFront {
+            cancelPendingSearch()
+            return false
+        }
+        pendingSearch = nil
+        return true
+    }
+
+    @discardableResult
+    func cancelPendingSearch() -> Bool {
+        guard pendingSearch != nil else { return false }
+        pendingSearch = nil
+        floating = false
+        return true
+    }
+
+    func closeSearchForPush(wasSearching: Bool) {
+        // Before the rise there is no searching layout to undo. setCompact would scroll the list to its top.
+        if cancelPendingSearch() { return }
+        floating = false
+        up = false
+        if wasSearching { setCompact(false) }
     }
 
     /// Laid out for searching or at rest (`compact`): the field's band above the list's top or not, the list at its top.
@@ -299,7 +335,7 @@ struct AgentsSearchOverlay: View {
     var shell: Bool
     @Binding var query: String
     var begin: () -> Void
-    var focused: () -> Void
+    var focused: (UUID?) -> Void
     var cancel: () -> Void
 
     var body: some View {
@@ -308,10 +344,11 @@ struct AgentsSearchOverlay: View {
             let from = header.listTop + AgentsHeader.room(shell: shell) - proxy.frame(in: .global).minY // the row's field
             let retained = AgentsSearchVisibility.retained(query: query)
             if header.floating || retained {
+                let start = header.pendingSearch
                 HStack(alignment: .top, spacing: Theme.Size.searchCloseGap) {
                     // A retained field is the ordinary flat capsule and never autofocuses. Explicit activation changes
                     // its identity, so the active field gets the existing gesture, accessibility and keyboard setup.
-                    AgentsSearchField(text: $query, active: header.floating, begin: begin, focused: focused)
+                    AgentsSearchField(text: $query, active: header.floating, begin: begin, focused: { focused(start) })
                         .id(header.floating)
                     if header.floating {
                         // Its bar puts the item at its trailing margin: the page's edge.
