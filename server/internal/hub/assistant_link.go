@@ -91,6 +91,10 @@ func (h *Hub) assistantRoutesRelayed(api *http.ServeMux) {
 			by = h.byTodo
 		}
 		var relay http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) { h.forwardOwned(w, r, by) }
+		todoKind, todoReceipt := todoReceiptRoutes[pattern]
+		if todoReceipt { // relayed as a send: one cut off on the way may have been taken (todo_receipts.go)
+			relay = h.todoRelay(todoKind, by)
+		}
 		if pattern == "GET /api/v1/machines/{mid}/launchers/{name}/start-options" {
 			next := relay
 			relay = h.withMachine(func(w http.ResponseWriter, r *http.Request, m *Machine) {
@@ -106,6 +110,9 @@ func (h *Hub) assistantRoutesRelayed(api *http.ServeMux) {
 		}
 		if kind, ok := meetingReceiptRoutes[pattern]; ok {
 			relay = h.withBodyIDReceipt(kind, relay) // meeting_receipts.go
+		}
+		if todoReceipt {
+			relay = h.withTodoReceipt(todoKind, relay) // todo_receipts.go
 		}
 		api.HandleFunc(pattern, relay)
 	}
@@ -214,10 +221,10 @@ func (l assistantLink) deviceCallFrom(ctx context.Context, from string, p assist
 				others = append(others, from)
 			}
 			d.mu.Unlock()
-			// complete: the list is every machine there is (the manager reported them and the pending computers were
+			// complete: the list is every machine there is (from reported its own and the pending computers were
 			// read), so an id in neither it nor others was removed.
 			return json.Marshal(map[string]any{"devices": list, "phone_online": h.phoneClient() != nil,
-				"complete": h.devicesUp() && !h.trustUnknown(), "others": others, "apps": h.clientAppList(ctx)})
+				"complete": h.devicesUpFor(from) && !h.trustUnknown(), "others": others, "apps": h.clientAppList(ctx)})
 		}
 	}
 	m := h.localMachine(p.Device)

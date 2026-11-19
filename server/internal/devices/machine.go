@@ -119,9 +119,10 @@ type Machine struct {
 	kick      chan struct{}
 	// deploying: the manager is sending this machine the hub's node build (deploy.go); deployErr: why the last try
 	// failed.
-	deploying   bool
-	deployErr   string
-	deployPhase string
+	deploying       bool
+	deployErr       string
+	deployPhase     string
+	deployPreflight *nodeDeployPreflight
 	// via is how the connection runs (local | ssh | tailcat | link | service | hub), path how tailcat's packets go.
 	via, path                  string
 	directFailed, switchedBack time.Time
@@ -152,8 +153,16 @@ type Machine struct {
 	firstOnce sync.Once
 	// pending counts the node's questions waiting on the phone (interaction.create): no switching paths meanwhile.
 	pending int
-	// notes are the hub's one-way events waiting for the node (notes.go; their own lock, not m.mu).
-	notes nodeNotes
+	// notes are the hub's one-way events waiting for the node, bulkNotes a forwarded port's bytes (notes.go; their own
+	// locks, not m.mu).
+	notes, bulkNotes nodeNotes
+	noteBytes        atomic.Int64 // what both hold together (maxNoteBytes)
+	// frameFails are when recent connections ended on malformed frames; lanesOffUntil, until when lanes are not asked
+	// for (conn.go noteFrameFailure). Under mu.
+	frameFails    []time.Time
+	lanesOffUntil time.Time
+	// resumes counts this computer's dropped connections that could resume, and how they ended (resume.go). Under mu.
+	resumes resumeCounts
 	// opened is what the hub has open on the node through the bus connection of the moment (hubopen.go).
 	opened hubOpened
 	// claudeDirsMu serializes the read-modify-writes of the remembered and blocked Claude config dirs (claudedirs.go).
@@ -172,6 +181,7 @@ type Machine struct {
 	derived   bool
 	active    *nodePath
 	transport string
+	routeRev  uint64 // the serving connection's route generation, for late probes and callbacks
 	uid       string
 	next      *nodeConn
 	parked    string
@@ -659,6 +669,15 @@ func (m *Machine) callOnce(ctx context.Context, method string, params any, out a
 		snapshot.peer, snapshot.revision = p, m.sessionRevision
 		m.mu.Unlock()
 	}
+	if method == proto.MethodSessionEchoStatus && !nodeHas(info, nodeproto.SessionEchoStatus) {
+		return errEchoStatusUnsupported
+	}
+	if try, ok := ctx.Value(heldDeliveryKey{}).(*heldTry); ok && try.checkUnseen && method == "session.send" {
+		if !nodeHas(info, nodeproto.SessionEchoStatus) {
+			return errEchoStatusUnsupported
+		}
+		method = proto.MethodSessionSendUnseen
+	}
 	if nodeHas(info, nodeproto.OwnerControls) {
 		method = ownerControlMethod(ctx, method)
 	}
@@ -818,11 +837,15 @@ func (m *Machine) onEvent(event string, params json.RawMessage) {
 	}
 	m.noteClosed(event, params)
 	switch event {
+	case nodeproto.EventUpdatePreflightFailed:
+		m.nodeUpdatePreflightFailed(params)
+		return
 	case "sessions.changed":
 		m.sessionsEventMu.Lock()
 		defer m.sessionsEventMu.Unlock() // held through OnEvent and forward below
 		if list, ok := m.decodeSessions(params); ok {
 			m.setSessions(list)
+			m.d.heldWake(m.cfg.ID) // a message held for a session listed now goes (held.go)
 		}
 	case "sessions.revs":
 		var p struct {

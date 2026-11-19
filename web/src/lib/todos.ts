@@ -62,6 +62,8 @@ export interface Todo {
    *  pieces"); unset for a to-do that is no piece and from hubs without them. */
   part_of?: string;
   after?: string[];
+  /** Unmet prerequisite to-do IDs for a strict piece; an empty list means none, omission keeps legacy behavior. */
+  prerequisite_blockers?: string[];
   done_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -708,20 +710,6 @@ export interface TodoDecision {
   created_at: string;
   /** Completion time for an outcome written by Persona, which may be recorded later. */
   phase_completed_at?: string;
-}
-
-/** Where a decision came from, as the detail page says it: the agent that asked, by its title when known. */
-export function decisionSourceLabel(d: TodoDecision, todo: Todo, lookup: ReturnType<typeof makeSessionLookup>): string {
-  if (d.source === "outcome") return t("lib-todos.decision_outcome");
-  if (d.source === "agent") return t("lib-todos.decision_by_agent");
-  if (d.source === "thread") return t("lib-todos.decision_by_thread");
-  if (d.source !== "card") return t("lib-todos.decision_manual");
-  const title = lookup(d.source_machine, d.source_session)?.title
-    || todo.agents?.find((a) => a.machine_id === d.source_machine && a.session_id === d.source_session)?.title;
-  if (!title) return t("lib-todos.decision_agent_question");
-  // A session's title is often its first message: keep the label to a glance.
-  const short = [...title.trim()].length > 24 ? `${[...title.trim()].slice(0, 24).join("")}…` : title.trim();
-  return t("lib-todos.decision_in_question", { title: short });
 }
 
 /** How a to-do's Decisions list is shown (#6447, docs/assistant/todos.md "Decision records"): the first few, the
