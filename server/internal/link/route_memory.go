@@ -45,7 +45,14 @@ func routeNetwork(addresses func() ([]net.Addr, error)) string {
 	}
 	var ips []string
 	for _, a := range addrs {
-		if ip := interfaceIP(a); ip.IsGlobalUnicast() {
+		ip := interfaceIP(a)
+		if !ip.IsGlobalUnicast() {
+			continue
+		}
+		if ip.Is6() {
+			// Temporary IPv6 addresses rotate their interface ID without changing the network prefix.
+			ips = append(ips, netip.PrefixFrom(ip, 64).Masked().String())
+		} else {
 			ips = append(ips, ip.String())
 		}
 	}
@@ -79,16 +86,25 @@ func (m *routeMemory) beforeDial(c *Config) string {
 		m.loaded = true
 	}
 	m.binding = routeBinding{Pairing: pairingFingerprint(c), Network: routeNetwork(m.addresses)}
-	if m.binding != m.hint.routeBinding {
+	if m.binding.Pairing != m.hint.Pairing {
 		m.clear()
+	}
+	m.invalidateNetwork(m.binding.Network)
+	if m.binding.Network == "" && m.hint.Network != "" {
+		return "" // use default order until the saved network can be checked
 	}
 	return m.hint.Kind
 }
 
 func (m *routeMemory) connected(kind string) {
-	if !isFallbackKind(kind) || routeNetwork(m.addresses) != m.binding.Network {
+	if !isFallbackKind(kind) {
 		m.clear()
 		return
+	}
+	network := routeNetwork(m.addresses)
+	m.invalidateNetwork(network)
+	if network != m.binding.Network || (network == "" && m.hint.Network != "") {
+		return // the dial's network is unconfirmed; do not replace a saved hint
 	}
 	hint := routeHint{Kind: kind, routeBinding: m.binding}
 	if hint == m.hint {
@@ -113,7 +129,13 @@ func (m *routeMemory) connected(kind string) {
 }
 
 func (m *routeMemory) networkChanged() {
-	if m.hint.Kind != "" && routeNetwork(m.addresses) != m.hint.Network {
+	if m.hint.Kind != "" {
+		m.invalidateNetwork(routeNetwork(m.addresses))
+	}
+}
+
+func (m *routeMemory) invalidateNetwork(network string) {
+	if network != "" && network != m.hint.Network {
 		m.clear()
 	}
 }

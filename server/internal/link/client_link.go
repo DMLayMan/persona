@@ -311,15 +311,12 @@ func (l *link) serve(ctx context.Context, c *Config, o Options, rep *reporter, m
 					ping(false, hb.timeout)
 				}
 			case <-o.Check:
-				if l.localGone() {
-					if memory != nil {
-						memory.clear()
-					}
-					drop(newTextError("link-errors.network_address_gone", nil))
-					return
-				}
 				if memory != nil {
 					memory.networkChanged()
+				}
+				if l.localGone() {
+					drop(newTextError("link-errors.network_address_gone", nil))
+					return
 				}
 				if !checking {
 					checking = true
