@@ -115,7 +115,7 @@ var streamID = lazyre.New(`^[A-Za-z0-9_-]{1,64}$`)
 
 // serve runs the link until it ends and says why. A direct handoff is already connected and owned by the caller;
 // every other return leaves no direct candidate behind.
-func (l *link) serve(ctx context.Context, c *Config, o Options, rep *reporter) (*directHandoff, error) {
+func (l *link) serve(ctx context.Context, c *Config, o Options, rep *reporter, memory *routeMemory) (*directHandoff, error) {
 	l.again = make(chan struct{}, 1)
 	l.setEndpoints(c.Endpoints)
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -153,6 +153,9 @@ func (l *link) serve(ctx context.Context, c *Config, o Options, rep *reporter) (
 		*s = Status{State: "connected", Conn: l.gen, Machine: c.Machine, HubName: c.HubName, MachineName: c.MachineName, Address: l.ep.URL,
 			Kind: l.ep.Kind, Proxy: l.proxy, Since: &since, Node: "unknown", Trust: trustOf(c), Endpoints: ranked(c.Endpoints), SSH: cloneSSH(c.SSH)}
 	})
+	if memory != nil {
+		memory.connected(l.ep.Kind)
+	}
 	go l.renames(ctx, o, rep)
 	go l.presence(ctx, o)
 	go l.confirms(ctx, o)
@@ -306,8 +309,14 @@ func (l *link) serve(ctx context.Context, c *Config, o Options, rep *reporter) (
 				}
 			case <-o.Check:
 				if l.localGone() {
+					if memory != nil {
+						memory.clear()
+					}
 					drop(newTextError("link-errors.network_address_gone", nil))
 					return
+				}
+				if memory != nil {
+					memory.networkChanged()
 				}
 				if !checking {
 					checking = true
@@ -591,7 +600,7 @@ func (l *link) localGone() bool {
 		return false
 	}
 	for _, a := range addrs {
-		if p, err := netip.ParsePrefix(a.String()); err == nil && p.Addr().Unmap().WithZone("") == l.local.WithZone("") {
+		if interfaceIP(a) == l.local.WithZone("") {
 			return false
 		}
 	}
