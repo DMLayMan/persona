@@ -197,6 +197,10 @@ class NodeArtifactTests(unittest.TestCase):
             self.assertEqual(artifacts.digest(binary), artifact['binary_sha256'])
             self.assertEqual(binary.with_suffix('.version').read_text(), manifest['version'] + '\n')
         self.assertEqual(self.publish(manifest), destination)
+        metadata = destination / 'manifest.json'
+        metadata.write_text(json.dumps({k: v for k, v in manifest.items() if k != 'nodes'}))
+        self.assertFalse(artifacts.managed_nodes(self.root))
+        metadata.write_text(json.dumps(manifest))
         (destination / 'persona-node-darwin-arm64.version').write_text('wrong\n')
         self.assertFalse(artifacts.managed_nodes(self.root))
 

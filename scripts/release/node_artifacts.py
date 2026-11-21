@@ -115,9 +115,13 @@ def verify_binary(path, platform, manifest, program='personad'):
 
 
 def verify_installed_nodes(directory, manifest):
+    if not stat.S_ISDIR(directory.lstat().st_mode):
+        raise ValueError('Node release must be a non-symlink directory')
+    expected = {'manifest.json'}
     for program, platform, artifact in node_files(manifest):
         binary = directory / f'{program}-{platform}'
         sidecar = binary.with_suffix('.version')
+        expected.update((binary.name, sidecar.name))
         if not stat.S_ISREG(binary.lstat().st_mode) or not stat.S_ISREG(sidecar.lstat().st_mode):
             raise ValueError('Node binary and version must be regular non-symlink files')
         if sidecar.read_text().strip() != manifest['version']:
@@ -125,6 +129,9 @@ def verify_installed_nodes(directory, manifest):
         if digest(binary) != artifact['binary_sha256']:
             raise ValueError('Node binary checksum changed')
         verify_binary(binary, platform, manifest, program)
+    if ({entry.name for entry in directory.iterdir()} != expected
+            or not stat.S_ISREG((directory / 'manifest.json').lstat().st_mode)):
+        raise ValueError('Unexpected immutable node release contents')
 
 
 def managed_nodes(root):
