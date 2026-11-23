@@ -63,6 +63,19 @@ func (n *Node) runtimeAssistant(id string) bool {
 	return runtimeSessionID(id) && n.isAssistantSession(id)
 }
 
+func (n *Node) strictRuntimeSession(id string, strict bool) bool {
+	if !strict {
+		return false
+	}
+	_, _, known := n.runtimes.belongs(id)
+	return known
+}
+
+// assistantRuntimeRoute classifies the resolved launcher and the existing conversation.
+func (n *Node) assistantRuntimeRoute(id, launcher string, strictRuntime bool) (*runtimeConn, bool) {
+	return n.assistantRuntime(launcher), n.runtimeAssistant(id) || strictRuntime
+}
+
 // runtimeSessionID: id is shaped like a runtime's conversation. Claude's and Codex's ids are uuids (validID); a
 // runtime's are its own (DSH: session-<uuid>).
 func runtimeSessionID(id string) bool { return id != "" && !validID(id) && runtimeIDRe.MatchString(id) }
@@ -88,7 +101,7 @@ func (n *Node) runtimeAssistantCwd(id, cwd string, st sessionState) string {
 // instructions only a runtime needs (memory, Feishu). Runtimes that advertise caps.supervision_policy receive manager-owned
 // supervision_instructions as an explicit protocol field on session.start and session.send; non-capable runtimes keep
 // the runtimePolicyDropped boundary (refusing supervision deliveries, dropping policy for owner messages).
-func (n *Node) assistantSendRuntime(ctx context.Context, h *runtimeConn, id, cwd, launcher, text string, images []proto.Image, mode string, public, strict bool, selected []assistantskills.Entry, modelEffortPolicy ...string) (string, error) {
+func (n *Node) assistantSendRuntime(ctx context.Context, h *runtimeConn, id, cwd, launcher, text string, images []proto.Image, mode string, public, strict, modeExplicit bool, selected []assistantskills.Entry, modelEffortPolicy ...string) (string, error) {
 	hasInput := strings.TrimSpace(text) != "" || len(images) != 0
 	if id != "" && hasInput && n.runtimes.compacting(id) {
 		return "", runtimeCompactingRefusal(ctx)
@@ -185,7 +198,7 @@ func (n *Node) assistantSendRuntime(ctx context.Context, h *runtimeConn, id, cwd
 		}
 		n.state.put(id, st)
 	}
-	n.persistModes(id, mode, pickedEffort)
+	n.persistModes(id, mode, pickedEffort, modeExplicit)
 	if !hasInput {
 		awaitList(n.notifySessionsSoon())
 		return id, nil
