@@ -37,6 +37,9 @@ func TestMeetingRepositoryReadsDoNotImportLegacyLinks(t *testing.T) {
 				}
 				// Reconstruct the service so the legacy state comes from durable storage.
 				s, _ := repositoryService(t, database)
+				if s.rec == nil {
+					t.Skip("the recording module, whose meeting turns this reads, is not in this build")
+				}
 				if _, err := s.meetingTurnSent("box", "attendee", "recording", entry != "agent"); err != nil {
 					t.Fatal(err)
 				}
