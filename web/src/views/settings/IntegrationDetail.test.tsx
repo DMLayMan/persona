@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 // Unit & integration tests for the lazy-loaded unified IntegrationDetail view (integrations_v2, #14847).
+import { installedMailbox, preloadMailbox } from "../../test/installed-mailbox";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -409,7 +410,9 @@ describe("integrations_v2 gating & legacy isolation", () => {
 });
 
 describe("Built-in services", () => {
-  it("renders Mail with Account & Connection accounts and Inbox & Sync switch", async () => {
+  it.skipIf(!installedMailbox)("renders Mail with Account & Connection accounts and Inbox & Sync switch", async () => {
+    await preloadMailbox("Settings");
+    await preloadMailbox("InboxSwitch");
     act(() => {
       root.render(<IntegrationDetail target={{ kind: "builtin", id: "mail" }} />);
     });
@@ -508,7 +511,7 @@ describe("Built-in services", () => {
     });
 
     for (const target of [
-      { kind: "builtin", id: "mail" } as const,
+      ...(installedMailbox ? [{ kind: "builtin", id: "mail" } as const] : []),
       { kind: "builtin", id: "lark" } as const,
       { kind: "builtin", id: "chat-history", connectorId: "chat-history" } as const,
     ]) {
@@ -530,7 +533,7 @@ describe("Built-in services", () => {
   it("omits the Back button when onBack is undefined (desktop split-pane / phone) and renders it when provided", async () => {
     const onBack = vi.fn();
     for (const target of [
-      { kind: "builtin", id: "mail" } as const,
+      ...(installedMailbox ? [{ kind: "builtin", id: "mail" } as const] : []),
       { kind: "builtin", id: "feishu-bot" } as const,
       { kind: "extension", id: "larkx" } as const,
     ]) {
@@ -549,7 +552,7 @@ describe("Built-in services", () => {
       expect(visibleBack, `${target.id} with onBack`).toBeDefined();
       act(() => visibleBack!.click());
     }
-    expect(onBack).toHaveBeenCalledTimes(3);
+    expect(onBack).toHaveBeenCalledTimes(installedMailbox ? 3 : 2);
   });
 });
 
@@ -873,7 +876,7 @@ describe("manager-owned integration links", () => {
 
   it.each([
     ["github", "saved-repositories-shortcut", "settings/persona#repositories"],
-    ["mail", "knowledge-scope-shortcut", "settings/knowledge#knowledge-items"],
+    ...(installedMailbox ? [["mail", "knowledge-scope-shortcut", "settings/knowledge#knowledge-items"]] : []),
   ])("opens %s settings with the owner's assistant already selected", async (id, row, destination) => {
     const onSettings = vi.fn(() => chosenManager());
     await act(async () => root.render(<IntegrationDetail integrationsV2 target={{ kind: "builtin", id, manager: "work" }} onSettings={onSettings} />));
@@ -1009,7 +1012,9 @@ describe("integration detail parity", () => {
     expect(onOpen).toHaveBeenCalledWith(JSON.stringify(kind === "builtin" ? { c: "plain" } : { ext: "plain" }), undefined);
   });
 
-  it("refreshes mail accounts and only groups an available inbox switch", async () => {
+  it.skipIf(!installedMailbox)("refreshes mail accounts and only groups an available inbox switch", async () => {
+    await preloadMailbox("Settings");
+    await preloadMailbox("InboxSwitch");
     currentMailAccounts = [];
     await act(async () => root.render(<IntegrationDetail target={{ kind: "builtin", id: "mail" }} />));
     expect(requests.some((r) => r.url.includes("/connectors?all=1"))).toBe(false);

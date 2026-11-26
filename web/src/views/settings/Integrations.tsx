@@ -3,7 +3,7 @@
 // into one deduplicated list with capability filter chips, subscription health alerts, Extension Market access,
 // inline IntegrationDetail (#14868) mounting, and a lazy-loaded Data Flow view (#15423).
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { hubServes, moduleFeature } from "../../core/module-host";
+import { loadMailAccounts, useMailboxEnabled } from "../../lib/mail";
 import { t } from "../../i18n";
 import { ExternalSourceSettingsEntry } from "../../features/external-sources/ExternalSourceSettingsEntry";
 import type { MailAccount } from "../../lib/agent-settings";
@@ -317,7 +317,7 @@ export function Integrations({
   const hasExtensions = useStore((s) => hubHasExt(s.features, "manager"));
   const hasChannels = useStore((s) => s.features.includes("channels"));
   const hasConnectors = useStore((s) => s.features.includes("connectors"));
-  const hasMail = useStore((s) => hubServes(moduleFeature("mail"), s));
+  const hasMail = useMailboxEnabled();
   const hasLark = useLarkOn();
   const hasSubscriptions = useSubscriptionsShown();
   const hasInboxSources = useInboxSourcesShown();
@@ -379,7 +379,7 @@ export function Integrations({
           })
         : Promise.resolve(null),
       hasMail
-        ? api<{ accounts?: MailAccount[] }>("/mail/accounts").then((r) => r.accounts ?? [], () => null)
+        ? loadMailAccounts(owner).catch(() => null)
         : Promise.resolve(null),
       hasLark
         ? api<LarkGatewaySummary>("/lark/status").catch(() => null)
