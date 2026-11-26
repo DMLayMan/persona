@@ -937,6 +937,11 @@ existing overview list style.
 
 ### 3.4 Lists and rows
 
+- **Android Agents seen rows** (#12584): reading a visible Unread or Just finished row keeps it in place as Seen for the
+  current visit. Fresh work takes its usual position and only unread work contributes to the Unread count. By state offers
+  **Clear Seen (N)** for its retained rows. Pull to refresh or change the list scope to start a new visit. Appearance →
+  Agents list → Seen Agents switches between keeping rows in place and moving them when a chat closes.
+
 - Web History (#10240) is an Agents destination for non-running sessions, grouped by local activity day. It shares folded sidebar state and visibility before filtering; day counts equal the displayed filtered rows, including only loaded content-search matches. The primary switch stays Assistant / Agents. Agents + owns New Agent, New terminal and Open terminals; History never starts on a remembered terminal inventory (details in `docs/web/web.md`).
 
 - **Native workspace pins** (#9300): the Agents workspace tree shows a host-pinned workspace with the existing pin mark,
@@ -1241,7 +1246,7 @@ reply's) have it; Apple and HarmonyOS follow in their own issues and show these 
 
 #### Rows read during a visit
 
-Reading a queue of finished Agents is open, read, back, the next one (#12514; web #12585). On iPhone, iPad and the web every row the Agents
+Reading a queue of finished Agents is open, read, back, the next one (#12514; web #12585; Android #12584). On iPhone, iPad, Android and the web every row the Agents
 list showed as Unread or Just finished during the visit keeps that place once it is seen, opened or marked there or
 seen elsewhere (`docs/protocol/agent-states.md` ("Seen")), in every grouping and under a quick filter, so the next one
 is still right below and nothing slides from under the finger. A chat that finished while it was open was never in that
@@ -1271,8 +1276,8 @@ Why: one concept had two rules. The Unread filter kept a read row (`kept`) and t
 a read task (#10922), but By Status moved it to the folded Seen section as soon as the chat was left, also on a tapped
 notification or a switch of tab (Principle 4). Rejected: a new filter chip (the bar is an approved layout, "List
 controls"); dimming the row (a new look); marking seen only after a delay (it still moves when the chat is left).
-Android (#12584) and HarmonyOS with the shared core (#12583) keep the behavior before #12514 until then;
-the shared cases are in `spec/fixtures/sort/next/held_set.json` (replayed by iOS and the web).
+HarmonyOS with the shared core (#12583) keeps the behavior before #12514 until then; the shared cases are in
+`spec/fixtures/sort/next/held_set.json` (replayed by iOS, Android and the web).
 
 #### The work-item row
 
