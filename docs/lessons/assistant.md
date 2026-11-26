@@ -1072,6 +1072,22 @@ turn's decision to the delayed push and channel mirror. Reading the conversation
 time can pick up the next round. A restart test for promotion must show the hold still exists before it checks
 that a silent finish is refused.
 
+## A wait the Agent names outranks the state the hub guessed (#14899)
+
+A supervised Agent reported `blocked` / `unblock: other` ("someone has to fill in the web form") while two of its old
+polling shells were still running. Triage's background rule read the turn as "N background tasks running, it wakes
+itself" before it looked at the closeout, and the same background work kept the task's turn from settling, so no
+receipt, judgment or supervision signal went out. The task also sat in `needs_user` from an earlier decision the owner
+had dismissed, and `superviseJudged` returned early in that state. Nobody heard of the wait for three and a half hours.
+A rule that runs before the closeout is read must give way when the closeout names a person to wait for, and
+holding a decision open must not silence the task's later turns. The supervisor decides whether the news replaces the
+decision. A `done` closeout that still names the owner as the one to unblock it (`unblock: user` with a `waiting`
+line and no delivery) is a question, not finished work.
+
+Settling such a turn right after triage must not read the work state from the session lists: they pick up the
+triage's state only on the next publish, so the settle saw the previous turn's state and put the turn off again, with
+nothing left to wake it. The settle takes the triage's own entry for that turn (`withPersonWait`).
+
 ## An inbox row can carry more than one provider event (#15517)
 
 Keep the deduplication key independent of the Inbox row and the binding that matched. Two readers can report
