@@ -495,12 +495,9 @@ struct AssistantTopBar: View {
     @ViewBuilder private func menuItems(_ link: ConnectionStatus.Phase) -> some View {
         if model.isMultiHub, let current = model.hub?.group {
             // Several groups of hubs: each has its own Persona (docs/protocol/multi-hub.md「Terminology」); pick whose.
-            Section("hub") {
-                Picker("hub", selection: Binding(get: { current }, set: { model.selectHub($0) })) {
-                    ForEach(model.groupIDs, id: \.self) { g in
-                        Label(model.groupName(g), systemImage: Theme.Icon.hubGroup).tag(g)
-                    }
-                }
+            // Flat buttons in this menu: a Picker here becomes a second "hub" submenu on macOS (#16487).
+            Section {
+                HubGroupMenuItems(current: current)
             }
         }
         Section(menuTitle) {

@@ -1621,12 +1621,9 @@ private struct MainChatPlaceItems: View {
 
     var body: some View {
         if model.isMultiHub, let current = model.hub?.group {
-            Section("hub") {
-                Picker("hub", selection: Binding(get: { current }, set: { model.selectHub($0) })) {
-                    ForEach(model.groupIDs, id: \.self) { g in
-                        Label(model.groupName(g), systemImage: Theme.Icon.hubGroup).tag(g)
-                    }
-                }
+            // Flat buttons, not a hub-titled Picker that macOS would open as a second "hub" submenu (#16487).
+            Section {
+                HubGroupMenuItems(current: current)
             }
         }
         Section {

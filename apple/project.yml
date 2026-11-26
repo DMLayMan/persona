@@ -775,6 +775,7 @@ targets:
       - path: PersonaTests/WorktreeFormTests.swift
       - path: PersonaTests/SessionRenameFormTests.swift
       - path: PersonaTests/HubNamingCompatibilityTests.swift
+      - path: PersonaTests/HubSwitcherMenuTests.swift
       - path: PersonaTests/OldHubCompatibilityIntegrationTests.swift
       - path: PersonaTests/PersonaSelectionTests.swift
       - path: PersonaTests/ExtensionStreamTreeTests.swift
