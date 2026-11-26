@@ -406,6 +406,29 @@
         }
       }
     },
+    "%lld done [Knowledge Inbox]": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld done"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "対応済み %1$lld 件"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld 条已处理"
+          }
+        }
+      }
+    },
     "3 Days [Token Project]": {
       "comment": "Token usage by project: the range of the last 3 days",
       "localizations": {
@@ -693,6 +716,29 @@
       },
       "extractionState": "manual"
     },
+    "In Inbox": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Inbox"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "受信トレイ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收件箱"
+          }
+        }
+      }
+    },
     "Integrations": {
       "extractionState": "manual",
       "localizations": {
@@ -712,6 +758,29 @@
           "stringUnit": {
             "state": "translated",
             "value": "集成与受限访问"
+          }
+        }
+      }
+    },
+    "Knowledge Page": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knowledge Page"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ナレッジのページ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "知识库页面"
           }
         }
       }
@@ -811,6 +880,29 @@
         }
       },
       "extractionState": "manual"
+    },
+    "Open in Inbox: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Inbox: %1$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "受信トレイで開く：%1$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在收件箱打开：%1$@"
+          }
+        }
+      }
     },
     "Opened in a Terminal [Launcher]": {
       "comment": "Token usage by project: sessions typed in a terminal, with no launcher",
