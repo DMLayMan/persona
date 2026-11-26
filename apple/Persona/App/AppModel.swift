@@ -20,6 +20,7 @@ final class AppModel {
     /// The keychain could not be read at launch (before the first unlock after boot): `registry` is empty because it is
     /// unknown, not because nothing is paired. Nothing is written until it reads (`retryRegistry`).
     @ObservationIgnored private(set) var registryUnreadable = false
+    @ObservationIgnored private let readHubRegistry: () -> HubStore.Loaded
     /// The credentials upgrade in flight (upgradeCredentials).
     @ObservationIgnored var credentialsUpgrade: Task<Void, Never>?
     /// Pairing tokens this launch traded for the device's own, to that token (DeviceCredentialTrade): a socket or a
@@ -557,6 +558,7 @@ final class AppModel {
     var inboxToOpen: InboxOpenRequest?
     #if os(iOS)
     let pageVisibility = HubPageVisibility()
+    @ObservationIgnored var deferredNavigationEntry: (page: HubPage, group: String)?
     #endif
     /// A to-do, knowledge entry or computer a link opened where no screen handles links itself (`HubLinkSheet`), over
     /// everything.
@@ -853,8 +855,9 @@ final class AppModel {
     static let demoKey = "demo.on"
 
     /// `personas`: a store of its own (tests: a folder and defaults of their own); the app's otherwise.
-    init(stateFolder: URL? = nil, personas store: PersonaStore? = nil) {
+    init(stateFolder: URL? = nil, personas store: PersonaStore? = nil, readHubRegistry: @escaping () -> HubStore.Loaded = { HubStore.read() }) {
         self.stateFolder = stateFolder
+        self.readHubRegistry = readHubRegistry
         personas = store ?? PersonaStore()
         RetiredPreferences.clear(from: .standard)
         Task.detached(priority: .utility) { LarkAttachment.staging.sweep() }
@@ -870,7 +873,7 @@ final class AppModel {
             UserDefaults.standard.removeObject(forKey: Self.demoKey)
         }
         #endif
-        switch HubStore.read() {
+        switch readHubRegistry() {
         case .registry(let r): registry = r
         case .unreadable:
             // Not "unpaired": launched before the first unlock after boot (a push in the background). Nothing is
@@ -987,7 +990,10 @@ final class AppModel {
     /// The keychain could not be read at launch: try again (the app came to the front, the phone was unlocked), and
     /// once it reads, start as a launch with it would have.
     func retryRegistry() {
-        guard registryUnreadable, case .registry(let r) = HubStore.read() else { return }
+        guard registryUnreadable, case .registry(let r) = readHubRegistry() else { return }
+        #if os(iOS)
+        defer { resumeNavigationEntry() }
+        #endif
         registryUnreadable = false
         registry = r
         buildLinks()
@@ -1034,7 +1040,7 @@ final class AppModel {
         relabelMachines()
         syncExtensionSurfaces()
         #if os(iOS)
-        pageVisibility.follow(hub?.group)
+        pageVisibility.follow(hub?.group, link: hub.map(ObjectIdentifier.init))
         #endif
     }
 

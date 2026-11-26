@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import Persona
 
-@MainActor struct HubPageVisibilityTests {
+@MainActor @Suite(.serialized) struct HubPageVisibilityTests {
     private static let path = "/api/v1/navigation"
     private static let hidden = #"{"pages":{"hidden":["todos","inbox","web-only"]}}"#
 
@@ -85,6 +85,121 @@ import Testing
         #expect(app.openHubPage(.todo(id: "example"), group: "") == .sheet(.todo("example")))
         #expect(app.openHubPage(.inbox, group: "") == .opened)
         #expect(router.request?.page == .inbox)
+    }
+
+    @Test func warmLinkRoutesBeforeItsRefreshReturns() async throws {
+        let hub = FakeHub(), gate = ReadGate()
+        hub.on("GET", Self.path, json: #"{"pages":{"hidden":[]}}"#)
+        let (app, router) = try makeApp(hub)
+        app.connectOnly(ServerConfig(url: hub.url, token: "sample"))
+        await app.refreshPageVisibility()?.value
+        hub.onAsync("GET", Self.path) { _ in await gate.hold() }
+        app.selectedTab = .chats
+
+        let refresh = try #require(app.openNavigationLink(.inbox, group: ""))
+        #expect(router.request?.page == .inbox)
+        await gate.arrival()
+        gate.release(Data(Self.hidden.utf8))
+        await refresh.value
+        #expect(app.hiddenNavigationPages == [.inbox, .todos])
+    }
+
+    @Test func cancellingAnOlderReadLeavesItsReplacementInFlight() async {
+        let hub = FakeHub(), visibility = HubPageVisibility()
+        let first = ReadGate(), second = ReadGate()
+        hub.onAsync("GET", Self.path) { _ in await first.hold() }
+        let oldRead = visibility.refresh(hub.client)
+        await first.arrival()
+        oldRead.cancel()
+        #expect(!visibility.hasRead)
+
+        hub.onAsync("GET", Self.path) { _ in await second.hold() }
+        let replacement = visibility.refresh(hub.client)
+        // An uncooperative transport can finish the cancelled read after its replacement has started.
+        first.release(Data(Self.hidden.utf8))
+        await oldRead.value
+        if replacement == oldRead {
+            Issue.record("Refresh reused a cancelled read")
+            return
+        }
+        await second.arrival()
+        #expect(!visibility.hasRead)
+        #expect(visibility.refresh(hub.client) == replacement)
+        second.release(Data(#"{"pages":{"hidden":["todos"]}}"#.utf8))
+        await replacement.value
+        #expect(visibility.hasRead)
+        #expect(visibility.hiddenPages(in: "") == [.todos])
+    }
+
+    @Test func aNewHubLinkInTheSameGroupStartsWithoutAnAnswer() async {
+        let hub = FakeHub(), visibility = HubPageVisibility()
+        let oldLink = ReadGate(), newLink = ReadGate()
+        hub.on("GET", Self.path, json: Self.hidden)
+        await visibility.refresh(hub.client, link: ObjectIdentifier(oldLink)).value
+        #expect(visibility.hasRead)
+        #expect(visibility.hiddenPages(in: "", link: ObjectIdentifier(newLink)).isEmpty)
+        visibility.follow("", link: ObjectIdentifier(newLink))
+        #expect(!visibility.hasRead)
+    }
+
+    @Test(arguments: [true, false]) func coldEntryWaitsForTheSavedPairing(shortcut: Bool) async throws {
+        let hub = FakeHub(), gate = ReadGate()
+        hub.onAsync("GET", Self.path) { _ in await gate.hold() }
+        var loaded = HubStore.Loaded.unreadable
+        let (app, router) = try makeApp(hub, read: { loaded })
+        app.hubGroup = "saved"
+        app.selectedTab = .chats
+        if shortcut {
+            #expect(QuickAction.perform(QuickAction.inbox.item, in: app))
+        } else {
+            app.openWidget(.todos)
+        }
+        #expect(app.deferredNavigationEntry?.group == "saved")
+        #expect(app.selectedTab == .chats)
+        app.retryRegistry()
+        #expect(app.deferredNavigationEntry != nil)
+        loaded = .registry(HubRegistry(hubs: [paired(hub, group: "saved")]))
+        app.retryRegistry()
+        #expect(app.deferredNavigationEntry == nil)
+        let visibility = try #require(app.refreshPageVisibility())
+        await gate.arrival()
+        #expect(app.selectedTab == .chats)
+        gate.release(Data(#"{"pages":{"hidden":[]}}"#.utf8))
+        await visibility.value
+        let expected = shortcut ? ShellPage.inbox : .todos
+        for _ in 0..<100 where router.request?.page != expected { await Task.yield() }
+        #expect(router.request?.page == expected)
+    }
+
+    @Test func aDeferredEntryDoesNotFollowADifferentHubOrLaterPairing() throws {
+        let hub = FakeHub()
+        var loaded = HubStore.Loaded.unreadable
+        let (app, router) = try makeApp(hub, read: { loaded })
+        app.hubGroup = "missing"
+        app.selectedTab = .chats
+        app.openWidget(.inbox)
+        loaded = .registry(HubRegistry(hubs: [paired(hub, group: "other")]))
+        app.retryRegistry()
+        #expect(app.hub?.group == "other")
+        #expect(app.deferredNavigationEntry == nil)
+        #expect(router.request?.page != .inbox)
+
+        let (unpaired, _) = try makeApp(hub, read: { .registry(HubRegistry()) })
+        unpaired.openWidget(.inbox)
+        #expect(unpaired.deferredNavigationEntry == nil)
+    }
+
+    private func makeApp(_ hub: FakeHub, read: @escaping () -> HubStore.Loaded = { .registry(HubRegistry()) }) throws -> (AppModel, PadRouter) {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let app = AppModel(stateFolder: folder, readHubRegistry: read)
+        app.linkHooksForTests = (transport: try #require(hub.client.transport), socket: { SyncSocket() })
+        let router = PadRouter(unified: true)
+        router.attach(to: app)
+        return (app, router)
+    }
+
+    private func paired(_ hub: FakeHub, group: String) -> PairedHub {
+        PairedHub(config: ServerConfig(url: hub.url, token: "sample"), group: group, deviceID: "sample")
     }
 
     private final class ReadGate {

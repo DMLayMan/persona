@@ -58,8 +58,7 @@ enum QuickAction: String, CaseIterable {
 
     /// The item the menu was tapped with: true when it was one of these.
     @MainActor @discardableResult
-    static func perform(_ item: UIApplicationShortcutItem) -> Bool {
-        let model = AppModel.shared
+    static func perform(_ item: UIApplicationShortcutItem, in model: AppModel = .shared) -> Bool {
         if item.type == recentType, let path = item.userInfo?["key"] as? String, let key = SessionKey(path: path) {
             model.open(key) // an Agent's chat or a Persona conversation, as a notification opens it
             return true
@@ -72,7 +71,7 @@ enum QuickAction: String, CaseIterable {
         case .newConversation:
             model.openNewAssistant()
         case .inbox:
-            if let group = model.hub?.group { model.openNavigationLink(.inbox, group: group) }
+            model.openNavigationEntry(.inbox)
         }
         return true
     }

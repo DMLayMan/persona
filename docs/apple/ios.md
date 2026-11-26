@@ -1153,8 +1153,10 @@ Persona returns to the foreground. Both pages are visible with default settings,
 
 Hiding a page removes its entry and count from the drawer and iPad sidebar, including the folded Pages heading.
 Hiding Inbox also removes its Home Screen quick action and its contribution to the Assistant home list and app icon
-badge. A link, widget or saved Inbox shortcut for a hidden page returns to the Assistant conversation. The underlying
-items and APIs remain available to other features and tools.
+badge. A link, widget or saved Inbox shortcut for a hidden page returns to the Assistant conversation. Once a read has
+finished for the current hub, these entries use that result immediately and refresh it in the background. A widget or
+shortcut tapped before the phone can read its saved pairing waits for that pairing to become available; the request does
+not follow a different hub. The underlying items and APIs remain available to other features and tools.
 
 ## Home-screen quick actions (#3199)
 

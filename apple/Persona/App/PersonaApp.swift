@@ -44,7 +44,10 @@ struct PersonaApp: App {
                 .onContinueUserActivity(PersonaCalls.activityTypes[1]) { PersonaCalls.shared.continueActivity($0) }
                 #endif
                 #if os(iOS)
-                .onChange(of: model.hiddenNavigationPages) { QuickAction.publish() }
+                .onChange(of: model.hiddenNavigationPages) {
+                    QuickAction.publish()
+                    if case .todo? = model.linkSheet { model.returnToStartIfHidden(.todos) }
+                }
                 #endif
                 .task(id: model.fleetLook) { LiveActivityController.shared.look(model.fleetLook) { model.fleetFaces } }
                 .onOpenURL { url in

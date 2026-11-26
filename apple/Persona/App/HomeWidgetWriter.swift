@@ -273,10 +273,10 @@ extension AppModel {
         switch kind {
         case .agents: selectedTab = .chats
         case .inbox:
-            if let group = hub?.group { openNavigationLink(.inbox, group: group) }
+            openNavigationEntry(.inbox)
         case .record: MeetingRecorder.openRecordings()
         case .today, .todos:
-            if let group = hub?.group { openNavigationLink(.todos, group: group) }
+            openNavigationEntry(.todos)
         case .usage, .computers: showShellPage(.machines)
         case .health, .water, .protein, .healthToday: showShellPage(.health)
         }
