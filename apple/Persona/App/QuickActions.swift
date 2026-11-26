@@ -32,14 +32,21 @@ enum QuickAction: String, CaseIterable {
             return UIApplicationShortcutItem(type: recentType, localizedTitle: s.displayTitle, localizedSubtitle: recentSubtitle(s, key: key),
                                              icon: UIApplicationShortcutIcon(systemImageName: Theme.Icon.recent), userInfo: ["key": key.path as NSString])
         }
-        UIApplication.shared.shortcutItems = recent + offered(recording: RecordingModule.allowance).map(\.item)
+        let actions = offered(recording: RecordingModule.allowance, hidden: model.hiddenNavigationPages)
+        UIApplication.shared.shortcutItems = recent + actions.map(\.item)
     }
 
     /// The menu's actions on this hub: Start Meeting is left out while the hub's recording module is off (#15214). The
     /// menu is published at launch and when the app leaves the front, so one tapped before it caught up is refused in
     /// words (`MeetingRecorder.startRefusal`).
-    nonisolated static func offered(recording: RecordingAllowance) -> [QuickAction] {
-        allCases.filter { $0 != .meetingRecording || recording.offersWrites }
+    nonisolated static func offered(recording: RecordingAllowance, hidden: Set<HubNavigationPage> = []) -> [QuickAction] {
+        allCases.filter {
+            switch $0 {
+            case .meetingRecording: recording.offersWrites
+            case .inbox: !hidden.contains(.inbox)
+            case .newConversation: true
+            }
+        }
     }
 
     /// Where a recent conversation is: "Persona" for one of Persona's, else its computer and folder.
@@ -64,7 +71,8 @@ enum QuickAction: String, CaseIterable {
             Task { await MeetingRecorder.shared.startMeeting(inForeground: true) }
         case .newConversation:
             model.openNewAssistant()
-        case .inbox: model.selectedTab = .mail
+        case .inbox:
+            if let group = model.hub?.group { model.openNavigationLink(.inbox, group: group) }
         }
         return true
     }

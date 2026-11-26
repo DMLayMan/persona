@@ -555,6 +555,9 @@ final class AppModel {
     }
     /// An Inbox item a link asked to open (`HubPage.inboxItem`): the Inbox pushes it and clears this.
     var inboxToOpen: InboxOpenRequest?
+    #if os(iOS)
+    let pageVisibility = HubPageVisibility()
+    #endif
     /// A to-do, knowledge entry or computer a link opened where no screen handles links itself (`HubLinkSheet`), over
     /// everything.
     var linkSheet: HubLinkSheet?
@@ -1030,6 +1033,9 @@ final class AppModel {
         applyPersonaPalette()
         relabelMachines()
         syncExtensionSurfaces()
+        #if os(iOS)
+        pageVisibility.follow(hub?.group)
+        #endif
     }
 
 
@@ -3308,6 +3314,9 @@ final class AppModel {
         let isHub = group == hub?.group
         switch ev {
         case .hello(let hello):
+            #if os(iOS)
+            if isHub { refreshPageVisibility() }
+            #endif
             let previousSurfaceCapabilities = extensionSurfaceCapabilities
             link(group)?.received(hello)
             if let link = link(group), !link.isDemo { Task { await link.agentsDisplay.refresh() } }
@@ -5189,6 +5198,7 @@ final class AppModel {
         SavedPromptStore.shared.reload()
         #if os(iOS)
         refreshStarred(reset: true)
+        refreshPageVisibility()
         #endif
         followScope()
         // The avatar is the new hub's from now, before its list is read below: a card tapped meanwhile goes to it.
