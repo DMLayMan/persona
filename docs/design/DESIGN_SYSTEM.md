@@ -2571,16 +2571,14 @@ Kinds: questions, plan approvals, tool approvals, secret entry, MCP forms, and w
   any other, also while a permission holds the Agent (iOS sends it the same way). Each style keeps its own card: on
   Android, Glass a floating card inset like the composer, Brief a rounded card with a light shadow, Board a bordered card
   under its amber rule.
-  A Persona conversation's own requests (its model's tool approvals, `ask_user`) are the same: the stack above its
+  A Persona conversation's own requests (its model's tool approvals, `ask_user`) are the same: the pending area above its
   composer, under the Needs you / In progress entries and the route chip, on every client (#4883: on the web and Android
   they sat only in the closed Needs you tray, and an owner waited minutes on an approval no screen in the chat showed).
   Needs you still counts them, and its row for one closes the tray onto the card instead of drawing it a second time.
   On the web, a card the conversation's own turn waits on (its own session's request, not one of a worker or side
-  session folded under it: `lib/turn-asks.ts`, #11794) is never folded: each stands open above the Needs you / In
-  progress capsules, all of them at once, and Needs you neither counts nor lists it again. The cards of sessions folded
-  under the conversation keep the stack and the tray as above.
-  The stack holds the conversation's own cards alone, as one slot on the web: its first card with "2 / 6" (where it stands in the run), the next taking its place when it is answered, and what was just answered one line over it that goes 3 seconds after the last answer (details with the interaction cards in `docs/web/web.md`).
-  **To Decide** (iOS and iPadOS, #12831): in an assistant conversation the conversation's own cards and its tasks'
+  session folded under it: `lib/turn-asks.ts`, #11794) opens in To Decide by default (#12857). Only the owner can fold
+  the pager. Cards from workers or side sessions outside its tasks continue to use the waiting stack and the tray.
+  **To Decide** (iOS and iPadOS #12831, Web #12857): in an assistant conversation the conversation's own cards and its tasks'
   questions and approvals are one pager over the composer (`QuestionDock`), opened from a **To Decide** entry (zh-Hans
   待选择, `QuestionDockEntry`) first in the row of entries, drawn as they are (`DockCapsule`, the needs-you tone; the
   selected look while the pager is open). One card at a time, the conversation's own first and then the tasks' oldest
@@ -2593,10 +2591,13 @@ Kinds: questions, plan approvals, tool approvals, secret entry, MCP forms, and w
   terminal, a tool approval and a plan approval show it greyed with one line in `cautionText` saying why and what to use
   ("Reply in Chat Instead", Deny, send it back); every other card keeps the rule below (Skip where the request can be
   cancelled). A Needs You row for the conversation's own card closes the tray and opens the pager on that card; the
-  pager and a tray show one at a time, the pager stepping aside while a tray is open. The pager is capped as a lone
-  question card (#6277), owns the grabber (#12306), and in a voice call stays open at half the page. The three numbers
+  pager and a tray show one at a time, the pager stepping aside while a tray is open. The iOS pager is capped as a lone
+  question card (#6277), owns the grabber (#12306), and in a voice call stays open at half the page. The Web pager scrolls inside the composer's existing height limit. The three numbers
   are To Decide (the pager's cards), Needs you (its rows) and, in an Agent's chat, "N pending". An Agent's chat keeps the
   stack; the wrap-up chips stay chips after the entries.
+  In an Agent's chat on the web, the stack holds the conversation's own cards alone, as one slot: its first card with
+  "2 / 6" (where it stands in the run), the next taking its place when it is answered, and what was just answered one
+  line over it that goes 3 seconds after the last answer (details with the interaction cards in `docs/web/web.md`).
   **Android** (#12858) uses the same pager order, collapsed selection, and Skip rules with `AssistantTrayEntry`,
   `DecisionDock`, and `RequestEditor`. Its task source opens over the Assistant tab, where Back restores the pager.
   The existing message jump highlights the source. A card from a terminal without a tool ID goes to the latest question

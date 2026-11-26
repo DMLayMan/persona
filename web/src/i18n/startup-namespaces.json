@@ -1,4 +1,5 @@
 [
+  "chat-interactions.decision_skip_label",
   "starred.count",
   "starred.title",
   "agent-goal.plan_",
@@ -78,7 +79,7 @@
   "assistant-tasks.report_done",
   "assistant-tasks.report_question",
   "assistant-tasks.report_step",
-  "assistant-tasks.retry_",
+  "assistant-tasks.retry",
   "assistant-tasks.review",
   "assistant-tasks.said_",
   "assistant-tasks.say_",
