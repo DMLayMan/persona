@@ -436,7 +436,8 @@ func (s *Service) drainHeldRelays(ctx context.Context, now time.Time) {
 			continue
 		}
 		if slices.ContainsFunc(kept, func(m relayMsg) bool {
-			return !m.Due.IsZero() || !m.TriedAt.IsZero() || m.unresolvedSupervision() || m.standalonePermission()
+			return !m.Due.IsZero() || !m.TriedAt.IsZero() || m.unresolvedSupervision() || m.standalonePermission() ||
+				(m.Tool == extensionEventTool && !b.failedAt[id].IsZero())
 		}) {
 			if i, _ := b.pickLocked(id, leads[id], now); i >= 0 {
 				due = append(due, id)
