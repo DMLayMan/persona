@@ -1219,7 +1219,9 @@ private fun ChatPage(
                                 // Not while a "/" quick message is being picked: the list opens above the field, and with the
                                 // keyboard up the queue, the list and the status line together climbed over the top bar.
                                 if (renderStyle != ChatRenderStyle.Assistant && SlashCommand.suggestions(composer.value.text, clear = true).isEmpty())
-                                    ChatQueueStrip(session, chrome.actions, composer, { notice = it }, sessions::refresh, imageLimits = imageLimits)
+                                    ChatQueueStrip(session, chrome.actions, composer, { notice = it }, sessions::refresh,
+                                        imageLimits = imageLimits,
+                                        onRestoreContexts = { restored -> linkContexts = restored.fold(linkContexts, ::withQuote) })
                                 // A source that only lets the phone read says so where the typing would be.
                                 if (!canSend && session != null) ChatSourceNote(session)
                                 val showDecisions = {
@@ -1318,7 +1320,9 @@ private fun ChatPage(
                                 if (renderStyle == ChatRenderStyle.Assistant && SlashCommand.mainSuggestions(composer.value.text,
                                         clear = canSend && LocalMainChatClear.current != null,
                                         permissions = SessionModes.offersPermissions(session, glass, modeSheet), resources = res).isEmpty())
-                                    ChatQueueStrip(session, chrome.actions, composer, { notice = it }, sessions::refresh, imageLimits = imageLimits)
+                                    ChatQueueStrip(session, chrome.actions, composer, { notice = it }, sessions::refresh,
+                                        imageLimits = imageLimits,
+                                        onRestoreContexts = { restored -> linkContexts = restored.fold(linkContexts, ::withQuote) })
                                 if (embedded && assistantChat) LocalMainChatGuidance.current?.invoke()
                                 val offlineHint = if (agentChat) offlineAgentPlaceholder(session, machine, heldActions != null) else null
                                 LargeWindowComposer(key, composer, session?.status == "working" && !(agentChat && machine?.online == false),
