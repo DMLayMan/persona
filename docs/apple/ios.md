@@ -1156,7 +1156,8 @@ Hiding Inbox also removes its Home Screen quick action and its contribution to t
 badge. A link, widget or saved Inbox shortcut for a hidden page returns to the Assistant conversation. Once a read has
 finished for the current hub, these entries use that result immediately and refresh it in the background. A widget or
 shortcut tapped before the phone can read its saved pairing waits for that pairing to become available; the request does
-not follow a different hub. The underlying items and APIs remain available to other features and tools.
+not follow a different hub. If the selected hub was disconnected, the app remembers the replacement it selected for the
+next launch. The underlying items and APIs remain available to other features and tools.
 
 ## Home-screen quick actions (#3199)
 

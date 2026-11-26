@@ -21,6 +21,7 @@ final class AppModel {
     /// unknown, not because nothing is paired. Nothing is written until it reads (`retryRegistry`).
     @ObservationIgnored private(set) var registryUnreadable = false
     @ObservationIgnored private let readHubRegistry: () -> HubStore.Loaded
+    @ObservationIgnored private let hubSelectionDefaults: UserDefaults
     /// The credentials upgrade in flight (upgradeCredentials).
     @ObservationIgnored var credentialsUpgrade: Task<Void, Never>?
     /// Pairing tokens this launch traded for the device's own, to that token (DeviceCredentialTrade): a socket or a
@@ -855,9 +856,11 @@ final class AppModel {
     static let demoKey = "demo.on"
 
     /// `personas`: a store of its own (tests: a folder and defaults of their own); the app's otherwise.
-    init(stateFolder: URL? = nil, personas store: PersonaStore? = nil, readHubRegistry: @escaping () -> HubStore.Loaded = { HubStore.read() }) {
+    init(stateFolder: URL? = nil, personas store: PersonaStore? = nil,
+         readHubRegistry: @escaping () -> HubStore.Loaded = { HubStore.read() }, hubSelectionDefaults: UserDefaults = .standard) {
         self.stateFolder = stateFolder
         self.readHubRegistry = readHubRegistry
+        self.hubSelectionDefaults = hubSelectionDefaults
         personas = store ?? PersonaStore()
         RetiredPreferences.clear(from: .standard)
         Task.detached(priority: .utility) { LarkAttachment.staging.sweep() }
@@ -889,7 +892,7 @@ final class AppModel {
             registryUnreadable = false
         }
         #endif
-        hubGroup = UserDefaults.standard.string(forKey: Self.hubGroupKey) ?? ""
+        hubGroup = hubSelectionDefaults.string(forKey: Self.hubGroupKey) ?? ""
         if let raw = Self.savedPlace?.string(forKey: "app.tab"), let tab = AppTab(rawValue: raw) {
             selectedTab = tab
         }
@@ -1018,6 +1021,14 @@ final class AppModel {
         }
     }
 
+    /// Remember both an explicit pick and the fallback when a group's last pairing is removed. A later launch may
+    /// need that choice before protected pairing data is readable.
+    func rememberHubGroup(_ group: String) {
+        guard hubGroup != group else { return }
+        hubGroup = group
+        hubSelectionDefaults.set(group, forKey: Self.hubGroupKey)
+    }
+
     /// One link per group of the registry, keeping the ones that are already there (their sockets stay open).
     func buildLinks() {
         let wanted = registry.groups
@@ -1035,7 +1046,7 @@ final class AppModel {
         links = out
         for link in links where !link.isDemo { link.live.route = routePicker(link.group) }
         arrangeAddresses()
-        if link(hubGroup) == nil, let first = links.first { hubGroup = first.group }
+        if link(hubGroup) == nil, let first = links.first { rememberHubGroup(first.group) }
         applyPersonaPalette()
         relabelMachines()
         syncExtensionSurfaces()

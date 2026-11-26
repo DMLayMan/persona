@@ -146,7 +146,10 @@ import Testing
         let hub = FakeHub(), gate = ReadGate()
         hub.onAsync("GET", Self.path) { _ in await gate.hold() }
         var loaded = HubStore.Loaded.unreadable
-        let (app, router) = try makeApp(hub, read: { loaded })
+        let suite = "HubPageVisibilityTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let (app, router) = try makeApp(hub, read: { loaded }, defaults: defaults)
         app.hubGroup = "saved"
         app.selectedTab = .chats
         if shortcut {
@@ -171,10 +174,50 @@ import Testing
         #expect(router.request?.page == expected)
     }
 
+    @Test(arguments: [true, false]) func coldEntryFollowsThePreviouslySelectedFallback(shortcut: Bool) async throws {
+        let hub = FakeHub()
+        hub.on("GET", Self.path, json: #"{"pages":{"hidden":[]}}"#)
+        let suite = "HubPageVisibilityTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("", forKey: AppModel.hubGroupKey)
+        let primary = paired(hub, group: ""), remaining = paired(hub, group: "spare")
+        let both = HubRegistry(hubs: [primary, remaining])
+        let (previous, _) = try makeApp(hub, read: { .registry(both) }, defaults: defaults)
+        #expect(previous.hub?.group == "")
+        // Rebuild from the registry after disconnect, as removeGroup does, without writing the real keychain.
+        let afterDisconnect = HubRegistry(hubs: [remaining])
+        previous.registry = afterDisconnect
+        previous.buildLinks()
+        #expect(previous.hub?.group == "spare")
+        #expect(defaults.string(forKey: AppModel.hubGroupKey) == "spare")
+
+        var loaded = HubStore.Loaded.unreadable
+        let (relaunched, router) = try makeApp(hub, read: { loaded }, defaults: defaults)
+        relaunched.selectedTab = .chats
+        if shortcut {
+            #expect(QuickAction.perform(QuickAction.inbox.item, in: relaunched))
+        } else {
+            relaunched.openWidget(.todos)
+        }
+        #expect(relaunched.deferredNavigationEntry?.group == "spare")
+        loaded = .registry(afterDisconnect)
+        relaunched.retryRegistry()
+        let expected: ShellPage = shortcut ? .inbox : .todos
+        let read = try #require(relaunched.refreshPageVisibility())
+        await read.value
+        for _ in 0..<100 where router.request?.page != expected { await Task.yield() }
+        #expect(relaunched.deferredNavigationEntry == nil)
+        #expect(router.request?.page == expected)
+    }
+
     @Test func aDeferredEntryDoesNotFollowADifferentHubOrLaterPairing() throws {
         let hub = FakeHub()
         var loaded = HubStore.Loaded.unreadable
-        let (app, router) = try makeApp(hub, read: { loaded })
+        let suite = "HubPageVisibilityTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let (app, router) = try makeApp(hub, read: { loaded }, defaults: defaults)
         app.hubGroup = "missing"
         app.selectedTab = .chats
         app.openWidget(.inbox)
@@ -189,9 +232,10 @@ import Testing
         #expect(unpaired.deferredNavigationEntry == nil)
     }
 
-    private func makeApp(_ hub: FakeHub, read: @escaping () -> HubStore.Loaded = { .registry(HubRegistry()) }) throws -> (AppModel, PadRouter) {
+    private func makeApp(_ hub: FakeHub, read: @escaping () -> HubStore.Loaded = { .registry(HubRegistry()) },
+                         defaults: UserDefaults = .standard) throws -> (AppModel, PadRouter) {
         let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        let app = AppModel(stateFolder: folder, readHubRegistry: read)
+        let app = AppModel(stateFolder: folder, readHubRegistry: read, hubSelectionDefaults: defaults)
         app.linkHooksForTests = (transport: try #require(hub.client.transport), socket: { SyncSocket() })
         let router = PadRouter(unified: true)
         router.attach(to: app)
