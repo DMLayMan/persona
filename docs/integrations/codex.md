@@ -208,8 +208,8 @@ mid-turn too; `config.toml` stays as it is (`node/codex_terminal_modes.go`).
 
 - **Row**: `capabilities.model: true`, plus the current model, effort and speed. Before the rollout records its settings, the node uses the launch
   selections, launcher arguments and Codex configuration from the home that owns the rollout. The model catalog supplies defaults when available.
-  That home's `models_cache.json` gives the model's effort levels and speed choices. The row uses Codex's whole effort list for an unlisted model
-  and an empty list for a model with no effort choices. Speed choices require tiers in the catalog.
+  That home's `models_cache.json` gives the model's effort levels (`supported_reasoning_levels`) and speed choices. The row uses Codex's whole
+  effort list for an unlisted model and an empty list for a model with no effort choices. Speed choices require tiers in the catalog.
 - **Version check** uses the running Codex (#13290). The node requires a rollout and reads the pane process's executable version
   (`<exe> --version`, cached by executable path and modification time). If that version is unavailable, it uses the rollout's first
   `session_meta.cli_version`. The effective version must be 0.169 or later for the row to offer controls and for settings requests to type
