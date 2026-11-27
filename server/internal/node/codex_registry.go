@@ -1159,6 +1159,7 @@ func (n *Node) codexSessionsIn(seen map[string]bool, pass *codexListPass) []prot
 		}
 	}
 	n.codices.mu.Lock()
+	n.codices.desktopAsks = desktopAsks
 	if seq > n.codices.savedSeq {
 		n.codices.lastRows, n.codices.desktopAsks, n.codices.savedSeq = saved, desktopAsks, seq
 	}
