@@ -1098,6 +1098,7 @@ func (s *Service) reviewDoneTodoLocked(ctx context.Context, id, reason string, a
 				// A side conversation's task the main conversation supervised: the planning conversation hears it ended (#4669).
 				go s.taskEndedNotice(context.WithoutCancel(ctx), t, accepted, reason)
 			}
+			s.evaluateTodoAfterDependents(ctx, id)
 		}
 	}, nil
 }
