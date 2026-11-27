@@ -78,6 +78,9 @@ func (n *Node) retire(ctx context.Context, id string, closeTerminal, afterExit b
 	}
 	release := n.recovery.lock(id)
 	defer release()
+	if err := n.resolveStopRuntime(ctx, id); err != nil {
+		return false, err
+	}
 	unlock, _, ok, err := n.stoppable(id, true)
 	if err != nil {
 		return false, err
@@ -277,11 +280,48 @@ func (n *Node) stop(ctx context.Context, id string, retire bool) (stopped bool, 
 	return n.stopWithCause(ctx, id, retire, proto.StopUser)
 }
 
+// resolveStopRuntime probes connected Antigravity runtimes for an unlisted companion session ID (agy-<uuid>, which can
+// drop off runtime.sessions past maxSessions=80) when this machine has no local terminal pane, presence lock, or active
+// start holding it. If the runtime owns it, runtimeFor claims it so resolveAgyCompanionStop/stoppable classify it as
+// no_terminal / not_retirable instead of not_found; if the owning-prefix runtime confirms it does not exist, that typed
+// not_found error (with confirmed_missing=true) is returned (#16410, #16231).
+func (n *Node) resolveStopRuntime(ctx context.Context, id string) error {
+	conversation, ok := agyConversationID(id)
+	if !ok {
+		return nil
+	}
+	if h, _, known := n.runtimes.belongs(id); h != nil || known {
+		return nil
+	}
+	if n.hasOwnSession(id) || n.agyPaneRow(id) ||
+		n.isAssistantSession(id) || n.runtimeAssistant(id) || n.externalCodex(id) || n.restarting(id) {
+		return nil
+	}
+	if r := n.starts.get(id); r != nil && r.ended.IsZero() {
+		return nil
+	}
+	if _, _, held := n.agyOpenIn(id); held || n.agyHasRawPaneAttribution(conversation) {
+		return nil
+	}
+	switch agyPresenceLockProbe(filepath.Join(n.agyDataRoot(), "presence", conversation+".lock")) {
+	case agyLockHeld, agyLockUnknown:
+		return nil
+	}
+	_, err := n.runtimeFor(ctx, "session.interrupt", id)
+	return err
+}
+
 func (n *Node) stopWithCause(ctx context.Context, id string, retire bool, cause proto.StopCause) (stopped bool, err error) {
 	return n.stopWithGuard(ctx, id, retire, cause, false)
 }
 
 func (n *Node) stopWithGuard(ctx context.Context, id string, retire bool, cause proto.StopCause, guarded bool) (stopped bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if err := n.resolveStopRuntime(ctx, id); err != nil {
+		return false, err
+	}
 	// An Antigravity companion row id agy-<conversation-uuid> resolves here first: to its one live pane
 	// row, to an authoritative not_found for an orphaned conversation, or to a hard refusal. Every other
 	// id comes back unchanged. Resolving before the recovery lock also serializes companion-id stops with
@@ -400,7 +440,8 @@ func (n *Node) stoppable(id string, retire bool) (unlock func(), a host.Agent, o
 		return no(notRetirable, "assistant conversations are not stopped")
 	case n.externalCodex(id) || h != nil || known || terminalOnly:
 		return no(noTerminal, "this session belongs to another tool")
-	case n.restarting(id):
+	}
+	if n.restarting(id) {
 		// Refused at once rather than after the lock below, which a message carrying out a launcher switch holds for
 		// minutes: stopping the agent it starts then would leave the switch for nothing (launcher_switch.go).
 		return no(notRetirable, "still starting")
