@@ -6230,7 +6230,9 @@ Gmail's `archive` role return HTTP 422 with `unsupported`.
 
 A successful result includes the destination UID and UIDVALIDITY only when a `COPYUID` response identifies the moved
 message. Use those fields as the source identity and pass the old mailbox as `to_mailbox` to undo. Without them,
-automatic undo is unavailable. HTTP 409 with `mail_move_unknown` means the server did not confirm the write.
+automatic undo is unavailable. A tagged `BAD` rejecting a native `UID MOVE` returns HTTP 502 with `mail_move_failed`.
+HTTP 409 with `mail_move_unknown` means the outcome could not be confirmed. This includes a lost reply or a native
+`UID MOVE` ending in tagged `NO`, which does not guarantee that the message was left unchanged (RFC 6851 §3.3).
 `mail_move_partial` means the destination copy was acknowledged, but the final source state needs checking. In both
 cases, refresh both mailboxes before attempting a new move. A reconnect cannot replay an already-started write. A
 new request is a separate operation and may leave another copy. The UIDPLUS path expunges only the selected UID

@@ -199,6 +199,12 @@ func (s *Service) moveMessage(ctx context.Context, accountID string, uid uint32,
 	switch phase.Swap(moveStopped) {
 	case movePreparing:
 		return MoveResult{}, err
+	case moveNative:
+		// BAD rejects the command itself. NO may follow an applied move (RFC 6851 §3.3).
+		var response *imap.Error
+		if errors.As(err, &response) && response.Type == imap.StatusResponseTypeBad {
+			return MoveResult{}, moveFailed
+		}
 	case moveCopying:
 		var response *imap.Error
 		if errors.As(err, &response) && (response.Type == imap.StatusResponseTypeNo || response.Type == imap.StatusResponseTypeBad) {

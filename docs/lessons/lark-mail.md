@@ -102,7 +102,9 @@ When mainline hides the send button for an empty composer, attachment drafts sti
 - 163 is also slow to fetch, slower and more erratic the older the mail: 200 summaries per page, 4 seconds for the newest page, 6 to 20 seconds after that, over 20 seconds for the page around message 1000 (tested 2026-11-03). One IMAP operation gets only 20 seconds (`withConn`), so finding headers and fetching summaries must be done in small batches, with time counted from the start of the operation, connecting included (#858); batches of 500 with time counted from the start of the scan time out.
 - Wait for each UIDPLUS move command in order. The go-imap `Move` fallback pipelines COPY, STORE and EXPUNGE, so use
   it only with native MOVE. Once the first write may have reached the server, even a dropped tagged reply must not
-  trigger a replay. Test by letting the fake server apply the command before dropping the reply (#16742).
+  trigger a replay. A native MOVE can also end in tagged `NO` after applying the move (RFC 6851 §3.3); only `BAD`
+  rejects the command itself. Test by letting the fake server apply the command before replacing or dropping the
+  reply (#16742).
 - A cursor kept by UID must also record UIDVALIDITY: after the server rebuilds / migrates a mailbox, UIDs are renumbered from the start (RFC 3501 2.3.1.1), new mail's UIDs are all smaller than the old cursor, and comparing UIDs alone archives nothing until the new UIDs pass the old maximum.
   The cursor also can't jump straight to "the max UID of the newest page": if more than a page arrives between two runs, the ones in the middle are never read. The knowledge base's mail archiving (`extmgr/mail_connector.go`) now records `<account>#v`;
   when a page doesn't reach the old cursor it records the gap (`#f` < UID < `#h`) and fills it page by page; when UIDVALIDITY changes it starts again from the newest page and only takes mail later than the newest archived one (`#t`) (#2633).

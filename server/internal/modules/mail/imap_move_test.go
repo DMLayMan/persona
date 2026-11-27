@@ -317,6 +317,55 @@ func TestMailMoveFallbackStopsOnFailure(t *testing.T) {
 	}
 }
 
+func TestMailMoveNativeTaggedErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		apply  bool
+		status int
+		code   string
+	}{
+		{"BAD before applying", false, http.StatusBadGateway, "mail_move_failed"},
+		{"NO after applying", true, http.StatusConflict, "mail_move_unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, s := moveServer(t, imap.CapMove)
+			uid, req := testMoveRequest(t, srv, "INBOX")
+			var moveTag atomic.Pointer[string]
+			commands, logins := observeMove(t, srv, s, nil, imapProxyScript{
+				before: func(line string) string {
+					if moveCommand(line) != "UID MOVE" {
+						return ""
+					}
+					tag, _, _ := strings.Cut(line, " ")
+					if !tc.apply {
+						return tag + " BAD unsupported arguments\r\n"
+					}
+					moveTag.Store(&tag)
+					return ""
+				},
+				reply: func(line string, _ bool) string {
+					// RFC 6851 §3.3 permits a tagged NO even if a message moved.
+					if tag := moveTag.Load(); tag != nil && strings.HasPrefix(line, *tag+" OK ") {
+						return *tag + " NO move failed\r\n"
+					}
+					return line
+				},
+			})
+			requireMoveHTTPCode(t, postMove(t, s, uid, req), tc.status, tc.code)
+			if got := commands(); !slices.Equal(got, []string{"UID MOVE"}) || logins.Load() != 1 {
+				t.Fatalf("commands = %v, logins = %d; want one UID MOVE without replay", got, logins.Load())
+			}
+			wantArchive := uint32(0)
+			if tc.apply {
+				wantArchive = 1
+			}
+			if archive, inbox := moveBoxCount(t, srv, "Archive"), moveBoxCount(t, srv, "INBOX"); archive != wantArchive || inbox != 1-wantArchive {
+				t.Fatalf("archive = %d, inbox = %d; want %d and %d", archive, inbox, wantArchive, 1-wantArchive)
+			}
+		})
+	}
+}
+
 func TestMailMoveConnectionLoss(t *testing.T) {
 	for _, tc := range []struct {
 		name, command, code string
