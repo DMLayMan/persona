@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,7 +79,7 @@ func (f orcaCloseFixture) closeCalls(t *testing.T, want int) {
 }
 
 func TestOrcaCloseAfterExitVerifiesIdleOriginal(t *testing.T) {
-	for _, scenario := range []string{"closed", "user terminal", "old record", "missing shell mark", "old runtime", "unverifiable", "shell with jobs", "missing shell identity", "different shell", "reincarnated", "moved", "rebound during check", "process changed", "directory changed", "inventory failed", "truncated", "already gone", "close failed", "no close receipt"} {
+	for _, scenario := range []string{"closed", "user terminal", "old record", "missing shell mark", "old runtime", "unverifiable", "shell with jobs", "missing shell identity", "different shell", "reincarnated", "moved", "rebound during check", "process changed", "directory changed", "inventory failed", "truncated", "unknown completeness", "already gone", "close failed", "no close receipt"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newOrcaCloseFixture(t)
 			st, _ := f.n.state.get(sidA)
@@ -123,6 +124,8 @@ func TestOrcaCloseAfterExitVerifiesIdleOriginal(t *testing.T) {
 				f.o.Handle("terminal.list", func(map[string]any) any { return orcarttest.Fail{Code: "unavailable"} })
 			case "truncated":
 				f.o.Handle("terminal.list", func(map[string]any) any { return map[string]any{"terminals": []any{}, "truncated": true} })
+			case "unknown completeness":
+				f.o.Handle("terminal.list", func(map[string]any) any { return map[string]any{"terminals": []any{}} })
 			case "already gone":
 				f.o.SetTerminals()
 			case "close failed":
@@ -143,6 +146,85 @@ func TestOrcaCloseAfterExitVerifiesIdleOriginal(t *testing.T) {
 			} else {
 				f.closeCalls(t, 0)
 			}
+		})
+	}
+}
+
+func TestOrcaRekeyedFinishedTerminalKeepsItsOwner(t *testing.T) {
+	for _, mode := range []string{"manual", "grace", "after exit"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newOrcaCloseFixture(t)
+			if key := f.o.Orphan(f.owner.Handle); key == "" || key == host.ParsePane(f.owner.Pane).ID {
+				t.Fatal("fixture did not re-key its terminal")
+			}
+			listed, err := f.n.listPanes(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var marked int
+			for _, pane := range listed.Hosts[0].Panes {
+				if pane.Pane == f.owner.Pane && pane.AgentSession == sidA {
+					marked++
+				} else if pane.AgentSession != "" {
+					t.Fatalf("unexpectedly labelled terminal: %+v", pane)
+				}
+			}
+			if marked != 1 {
+				t.Fatalf("expected one re-keyed terminal at the original pane: %+v", listed.Hosts[0].Panes)
+			}
+			switch mode {
+			case "manual":
+				preview, err := f.n.closeFinished(t.Context(), f.owner.Pane, true)
+				if err != nil || len(preview["closed"].([]finishedTerminal)) != 1 {
+					t.Fatalf("close preview = %v, %v", preview, err)
+				}
+				f.closeCalls(t, 0)
+				closed, err := f.n.closeFinished(t.Context(), f.owner.Pane, false)
+				if err != nil || len(closed["closed"].([]finishedTerminal)) != 1 {
+					t.Fatalf("manual close = %v, %v", closed, err)
+				}
+			case "grace":
+				got := rounds(t, f.n, time.Now(), 0, testGrace)
+				if len(got[0]) != 0 || !slices.Equal(got[1], []string{f.owner.Pane}) {
+					t.Fatalf("grace close = %v", got)
+				}
+			case "after exit":
+				closed, err := f.n.closeExited(t.Context(), sidA)
+				if !closed || err != nil {
+					t.Fatalf("close after exit = %v, %v", closed, err)
+				}
+			}
+			f.closeCalls(t, 1)
+		})
+	}
+}
+
+func TestOrcaRekeyedTerminalNeedsLiveProof(t *testing.T) {
+	for _, scenario := range []string{"no creation record", "busy shell", "changed incarnation", "changed worktree", "old key reused"} {
+		t.Run(scenario, func(t *testing.T) {
+			f := newOrcaCloseFixture(t)
+			f.o.Orphan(f.owner.Handle)
+			key := host.ParsePane(f.owner.Pane).ID
+			switch scenario {
+			case "no creation record":
+				f.h.mu.Lock()
+				delete(f.h.made, key)
+				f.h.mu.Unlock()
+			case "busy shell":
+				f.o.SetProcess(f.owner.Handle, orcarttest.ShellWithJobs(42))
+			case "changed incarnation":
+				f.o.Update(f.owner.Handle, map[string]any{"incarnationId": "replacement"})
+			case "changed worktree":
+				f.o.Update(f.owner.Handle, map[string]any{"worktreeId": "other"})
+			case "old key reused":
+				tab, leaf, _ := strings.Cut(key, ":")
+				f.o.Move("term_user", tab, leaf)
+			}
+			st, _ := f.n.state.get(sidA)
+			if err := f.n.closeAfterExit(t.Context(), sidA, st, nil); err == nil {
+				t.Fatal("an unverifiable re-key was not refused")
+			}
+			f.closeCalls(t, 0)
 		})
 	}
 }
@@ -262,7 +344,7 @@ func (f orcaCloseFixture) task(t *testing.T, pid int) devicewire.TaskTerminal {
 }
 
 func TestOrcaTaskTerminalCloseAfterAcceptance(t *testing.T) {
-	for _, scenario := range []string{"closed", "no authorization", "focus changes", "split", "last tab", "process replaced", "live work", "inspection changes", "draft", "viewer", "wrong session", "write fails"} {
+	for _, scenario := range []string{"closed", "no authorization", "orphaned during check", "focus changes", "split", "last tab", "process replaced", "live work", "inspection changes", "draft", "viewer", "wrong session", "write fails"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newOrcaCloseFixture(t)
 			target := f.task(t, idleTaskTerminalPID(t))
@@ -273,6 +355,11 @@ func TestOrcaTaskTerminalCloseAfterAcceptance(t *testing.T) {
 				want = devicewire.TaskTerminalClosed
 			case "no authorization":
 				allow = func() bool { return false }
+			case "orphaned during check":
+				allow = func() bool {
+					f.o.Orphan(f.owner.Handle)
+					return true
+				}
 			case "focus changes", "split", "last tab":
 				allow = func() bool {
 					term := orcarttest.Terminal(f.owner.Handle, target.TabID, "leaf_2", "wt", f.cwd, "", "Agent", "claude")

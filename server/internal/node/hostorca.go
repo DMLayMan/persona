@@ -400,7 +400,9 @@ func (v *orcaView) layout() *host.Layout {
 	}
 	for _, t := range v.terms {
 		a := v.agent(t)
-		if !t.Orphaned && t.Connected {
+		// listTerminals only includes an orphan when it can map it back to
+		// a terminal this host created. Keep its identity for the saved receipt.
+		if t.Connected {
 			a.Tokens = map[string]string{orcaHandleToken: t.Handle, orcaIncarnationToken: t.IncarnationID}
 		}
 		l.Panes = append(l.Panes, a)

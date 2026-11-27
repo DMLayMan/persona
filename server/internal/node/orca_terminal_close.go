@@ -122,9 +122,18 @@ func (h *orcaHost) orcaCloseTarget(ctx context.Context, pane string, owner *orca
 		if t.PaneKey() != key && t.Handle != owner.Handle {
 			continue
 		}
-		if found.Handle != "" || t.PaneKey() != key ||
-			t.Handle == "" || t.Handle != owner.Handle || t.IncarnationID == "" || t.IncarnationID != owner.Incarnation ||
-			t.WorktreeID != owner.Workspace || !t.Local() || !t.Connected || t.Orphaned || t.Verdict == "unverifiable" {
+		if found.Handle != "" || t.Handle != owner.Handle || t.IncarnationID != owner.Incarnation ||
+			t.WorktreeID != owner.Workspace || !t.Local() || !t.Connected || t.Verdict == "unverifiable" {
+			return orcart.Terminal{}, orcaTerminalRefusal()
+		}
+		if t.Orphaned {
+			// An orphan has no tab layout to authorize task acceptance. For a
+			// stopped shell, follow only a re-key of the terminal this host made,
+			// not a user-moved pane or an unproved orphan after reconnect.
+			if task || t.PaneKey() == key || t.TabID == "" || t.LeafID == "" || !h.originalOrcaPlacement(key, t) {
+				return orcart.Terminal{}, orcaTerminalRefusal()
+			}
+		} else if t.PaneKey() != key {
 			return orcart.Terminal{}, orcaTerminalRefusal()
 		}
 		found = t
@@ -133,6 +142,16 @@ func (h *orcaHost) orcaCloseTarget(ctx context.Context, pane string, owner *orca
 		return orcart.Terminal{}, orcaTerminalRefusal()
 	}
 	return found, nil
+}
+
+// originalOrcaPlacement is the live creation record for the old pane key.
+// A close additionally compares the same identity with the durable session record.
+func (h *orcaHost) originalOrcaPlacement(key string, current orcart.Terminal) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	made, ok := h.made[key]
+	return ok && made.Handle == current.Handle && made.IncarnationID == current.IncarnationID &&
+		made.WorktreeID == current.WorktreeID
 }
 
 func orcaTaskTabInBackground(list *orcart.TerminalList, terminal orcart.Terminal) bool {

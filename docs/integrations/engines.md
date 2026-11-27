@@ -317,7 +317,10 @@ workspace behavior.
   mark also has to match where the OS exposes its environment. Protected macOS shells rely on the original creation
   receipt and live process evidence. Older runtimes can still open Agent tabs, and guarded close leaves an
   unverifiable terminal open. Task acceptance also requires a single-pane tab that the current layout shows in the
-  background with another tab in the workspace. Guarded closes support local macOS and Linux terminals.
+  background with another tab in the workspace. If Orca assigns a new pane key to a terminal its UI did not adopt,
+  the node can still list and clean up its stopped shell while the live creation record matches the handle,
+  incarnation and workspace. Without that live mapping it leaves the orphan open; an orphan has no tab layout
+  to authorize task acceptance. Guarded closes support local macOS and Linux terminals.
 - **The Agent mark** (#10111): every terminal Persona opens for an Agent starts with `PERSONA_AGENT=1` in its environment (herdr `workspace.create` / `tab.create` `env`, the Herdr App's `terminal.run` `env`, Orca's `terminal.create` `env`; `host.EnvLauncher`, with the startup switches in "What a start tab's shell starts with" below), so a shell's startup files can tell it from one the user opened, for example to skip a prompt's git status daemon: `[[ -n $PERSONA_AGENT ]] && …`. The typed start also puts `PERSONA_AGENT=1` in front of the Agent command (`agentMarkEnv`, `server/internal/node/agentenv.go`), so the Agent's processes carry it on every engine, including Tern, which takes no environment for a new terminal (there the shell itself does not have it). A herdr or an Orca without `env` support is asked again without it. Terminals the user opens never get it.
 - **Cleanup by hand**: `panes.list` labels each terminal a stopped Agent left with `agent_session`. **Close finished terminals**
   (`POST /api/v1/machines/{mid}/panes/close_finished`) previews the eligible terminals and closes only the ones the user confirms,
